@@ -260,7 +260,7 @@
   .sashTextLarge { display: none; }
   .sashTextSmall {
     display: block;
-    bottom: 3.39cqi;             /* 12 / 354 */
+    bottom: -5.65cqi;             /* -20 / 354 */
     left: calc(50% - 3.39cqi);  /* center over image, correct for sash overhang */
     transform: translateX(-50%);
     width: 67.80cqi;   /* 240 / 354 */
