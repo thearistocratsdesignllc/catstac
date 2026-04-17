@@ -1,65 +1,67 @@
-import Image from "next/image";
+import styles from './page.module.css'
+import NavBar from './NavBar'
+
+const cats = [
+  { id: 1, src: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=500&fit=crop' },
+  { id: 2, src: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=400&h=500&fit=crop' },
+  { id: 3, src: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?w=400&h=500&fit=crop' },
+  { id: 4, src: 'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=400&h=500&fit=crop' },
+  { id: 5, src: 'https://images.unsplash.com/photo-1592194996308-7b43878e84a6?w=400&h=500&fit=crop' },
+  { id: 6, src: 'https://images.unsplash.com/photo-1548802673-380ab8ebc7b7?w=400&h=500&fit=crop' },
+  { id: 7, src: 'https://images.unsplash.com/photo-1561948955-570b270e7c36?w=400&h=500&fit=crop' },
+  { id: 8, src: 'https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=400&h=500&fit=crop' },
+  { id: 9, src: 'https://images.unsplash.com/photo-1495360010541-f48722b35f7d?w=400&h=500&fit=crop' },
+  { id: 10, src: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?w=400&h=500&fit=crop' },
+  { id: 11, src: 'https://images.unsplash.com/photo-1472491235688-bdc81a63246e?w=400&h=500&fit=crop' },
+  { id: 12, src: 'https://images.unsplash.com/photo-1506755855567-92ff770e8d00?w=400&h=500&fit=crop' },
+]
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className={styles.main}>
+      <NavBar />
+
+      <div className={styles.winnerBanner}>
+        <p className={styles.congratsText}>Congratulations to Vincent!</p>
+        <div className={styles.winnerCard}>
+          <img
+            src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=800&h=600&fit=crop"
+            alt="Cat of the Day"
+            className={styles.winnerImage}
+          />
+          <div className={styles.winnerSash}>
+            <img src="/assets/winner_gradient_large.png" className={`${styles.sashGradient} ${styles.sashGradientLarge}`} alt="" />
+            <img src="/assets/winner_text_large.png" className={`${styles.sashText} ${styles.sashTextLarge}`} alt="Cat of the Day" />
+            <img src="/assets/rosette_large.png" className={`${styles.rosetteImg} ${styles.rosetteLarge}`} alt="" />
+            <img src="/assets/winner_gradient_small.png" className={`${styles.sashGradient} ${styles.sashGradientSmall}`} alt="" />
+            <img src="/assets/winner_text_small.png" className={`${styles.sashText} ${styles.sashTextSmall}`} alt="Cat of the Day" />
+            <img src="/assets/rosette_small.png" className={`${styles.rosetteImg} ${styles.rosetteSmall}`} alt="" />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+      </div>
+
+      <hr className={styles.divider} />
+
+      <p className={styles.instructions}>
+        Peruse these Catestants, and give your favorite a vote for tomorrow's Cat of the Day.
+      </p>
+
+      <div className={styles.grid}>
+        {cats.map((cat) => (
+          <div key={cat.id} className={styles.card}>
+            <img src={cat.src} alt="Catestant" className={styles.cardImage} />
+          </div>
+        ))}
+      </div>
+
+      <div className={styles.footer}>
+        <p>You've reached the end of the Catstac.</p>
+        <p>It'll be updated until 11:59:59 tonight, and tomorrow it'll be full of new Catestants.</p>
+        <p>Please add your own, or tell a friend who'd get it.</p>
+        <button className={styles.addButtonBottom}>
+          <img src="/assets/button_cat_bottom.png" alt="Add a Cat" className={styles.btnBottom} />
+        </button>
+      </div>
+    </main>
+  )
 }
