@@ -1,0 +1,157 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(100, 97, 88, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal {
+  background-color: var(--color-bg);
+  border: 1.5px solid rgba(132, 112, 0, 0.25);
+  border-radius: 20px;
+  padding: 56px 64px 52px;
+  max-width: 580px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-ballet);
+  font-size: 52px;
+  font-weight: 400;
+  color: var(--color-gold);
+  line-height: 1.1;
+  margin-bottom: 18px;
+}
+
+.divider {
+  width: 80px;
+  border: none;
+  border-top: 2.5px solid var(--color-pink);
+  margin-bottom: 28px;
+}
+
+.subtitle {
+  font-family: var(--font-nunito);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-gold);
+  line-height: 1.45;
+  margin-bottom: 20px;
+}
+
+.body {
+  font-family: var(--font-nunito);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--color-gold);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+
+.aside {
+  font-family: var(--font-nunito);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--color-gold);
+  font-style: italic;
+  margin-bottom: 28px;
+}
+
+.checkLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-nunito);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--color-gold);
+  cursor: pointer;
+  margin-bottom: 32px;
+}
+
+.checkbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--color-pink);
+  cursor: pointer;
+}
+
+.gotIt {
+  background-color: var(--color-pink);
+  color: #fff;
+  font-family: var(--font-nunito);
+  font-size: 18px;
+  font-weight: 700;
+  border: none;
+  border-radius: 100px;
+  padding: 14px 52px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.gotIt:hover {
+  opacity: 0.88;
+}
+
+.gotIt:active {
+  opacity: 0.75;
+}
+
+/* ── Tablet ── */
+@media (max-width: 768px) {
+  .modal {
+    padding: 44px 44px 40px;
+  }
+
+  .title {
+    font-size: 44px;
+  }
+
+  .subtitle {
+    font-size: 17px;
+  }
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    border-radius: 20px 20px 0 0;
+    padding: 36px 28px 40px;
+    max-width: 100%;
+  }
+
+  .title {
+    font-size: 36px;
+  }
+
+  .subtitle {
+    font-size: 16px;
+  }
+
+  .body {
+    font-size: 15px;
+  }
+
+  .aside {
+    font-size: 14px;
+  }
+
+  .gotIt {
+    width: 100%;
+    padding: 16px 0;
+  }
+}

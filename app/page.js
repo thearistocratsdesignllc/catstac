@@ -1,5 +1,6 @@
 import styles from './page.module.css'
 import NavBar from './NavBar'
+import IntroModal from './IntroModal'
 
 const cats = [
   { id: 1, src: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=500&fit=crop' },
@@ -19,6 +20,7 @@ const cats = [
 export default function Home() {
   return (
     <main className={styles.main}>
+      <IntroModal />
       <NavBar />
 
       <div className={styles.winnerBanner}>
