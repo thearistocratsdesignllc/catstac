@@ -88,3 +88,78 @@ All raster assets live in `public/assets/`. Many have paired `_large` / `_small`
 - **Payments** — wiring `VoteUsedModal`'s `onPurchase` prop to a checkout flow; persisting purchased vote balances.
 - **Backend** — replacing `catsData.js` / `winnersData.js` with real data sources; persisting submissions from `/submit`.
 - **Terms page** — linked from the submit form's agreement checkbox.
+
+## Database (Supabase)
+
+Schema lives in `supabase/migrations/001_initial_schema.sql`. All tables use UUID primary keys and `timestamptz` timestamps.
+
+### Connection
+
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser.
+- `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, server-side API routes only. Never expose to the browser.
+- Use `@supabase/supabase-js`. Browser-safe client: `lib/supabase/client.js`. Server-side client: `lib/supabase/server.js`.
+
+### Date column naming convention
+
+Two distinct dates exist in this system — never conflate them:
+
+- `voting_date` — the Pacific-time day a cat is available for voting (e.g. Monday). Used on `submissions`, `catestants`, `votes`.
+- `cotd_date` — the Cat of the Day date displayed publicly on the winners grid and in winner emails (e.g. Tuesday, always `voting_date + 1 day`). Used on `winners` only.
+
+### Tables
+
+| Table | Purpose |
+|---|---|
+| `submissions` | One row per /submit form submission. Login required — `user_id` is never null. |
+| `catestants` | One row per submitted cat. Belongs to a submission. |
+| `votes` | One row per vote cast. Login required — `user_id` is never null. |
+| `vote_credits` | Append-only ledger for purchased vote credits. Balance = `SUM(delta)` per `user_id`. |
+| `winners` | One row per winning cat per day. Ties produce multiple rows. |
+
+### Key columns and rules
+
+**`submissions`**
+- `user_id` — not null. Login required to submit.
+- `voting_date` — set server-side at submission time using current Pacific time.
+- `submitter_instagram` — stored without @ prefix.
+
+**`catestants`**
+- `voting_date` — denormalized from parent submission for fast grid queries.
+- `ai_status`: `'pending' | 'passed' | 'failed'`
+- `admin_status`: `'pending_review' | 'approved' | 'rejected'`
+- Only catestants where `admin_status = 'approved'` are visible to the public.
+
+**`votes`**
+- `user_id` — not null. Login required to vote.
+- Two rules enforced by two separate unique indexes:
+  1. `votes_one_per_user_per_cat` on `(user_id, catestant_id)` — one vote per user per catestant, free or purchased. Voting for the same cat twice is impossible regardless of credit balance.
+  2. `votes_one_free_per_user_per_day` on `(user_id, voting_date) where vote_type = 'free'` — one free vote per user per day. After the free vote is used, further votes must come from purchased credits.
+- `vote_type`: `'free' | 'purchased'`
+- Catestants belong to one `voting_date` and disappear after that day, so Rule 1 is only ever relevant within a single day.
+
+**`vote_credits`**
+- `delta` — positive for purchases (+3 or +10), negative when a purchased vote is spent (-1).
+- `source`: `'purchase' | 'spent'`
+- `stripe_payment_intent_id` — populated on purchase rows.
+- `catestant_id` — populated on spent rows.
+- Never update rows. Always append. Balance = `SELECT SUM(delta) FROM vote_credits WHERE user_id = $1`.
+- Credits never expire. Unused balance carries forward indefinitely.
+
+**`winners`**
+- `cotd_date` — the Cat of the Day date shown publicly. Always `voting_date + 1 day` from the winning catestant. Set by the nightly cron job.
+- `tie_sequence` — 1-based ordering within a tie, sorted by `catestants.created_at` ascending.
+- `portrait_url` — null until the Dutch Master portrait is generated.
+- `winner_email_sent_at` — null until the notification email is sent.
+
+### Row Level Security
+
+RLS is enabled on all tables. Pattern:
+- **Public read**: `catestants` (approved only), `votes`, `winners`
+- **Own data only**: `submissions`, `vote_credits`
+- **Service role only** (no public write policy on any table): all inserts and updates go through Next.js API routes using the service role key.
+
+### Data flow notes
+
+- **Display order is randomized client-side.** The DB returns catestants in insertion order; the page shuffles them on render.
+- **Vote enforcement is two-layered.** The API route checks eligibility first (returning a clear error); the DB unique indexes are the hard backstop.
+- **Nightly cron** (Vercel Cron Job, Pacific midnight): tallies votes per catestant → writes winner rows with `cotd_date = voting_date + 1` → triggers portrait generation → sends winner emails.
