@@ -1,0 +1,199 @@
+.main {
+  min-height: calc(100vh - 88px);
+  background-color: var(--color-bg);
+  padding: 40px 20px 100px;
+}
+
+.stage {
+  display: grid;
+  max-width: 1200px;
+  margin: 0 auto;
+  grid-template-columns: auto minmax(0, 1006px) auto;
+  grid-template-areas: "prev frame next";
+  column-gap: 16px;
+  align-items: center;
+  justify-content: center;
+  justify-items: center;
+}
+
+/* Frame establishes the inline-size container so all sash measurements
+   (cqi units) scale fluidly with the image's actual rendered width. */
+.frame {
+  grid-area: frame;
+  position: relative;
+  width: 100%;
+  max-width: 1006px;
+  container-type: inline-size;
+}
+
+.arrowLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.prev { grid-area: prev; }
+.next { grid-area: next; }
+
+.arrow { display: block; }
+.arrowLarge { height: 64px; width: auto; }
+.arrowSmall { display: none; }
+
+.imageWrap {
+  width: 100%;
+  aspect-ratio: 1006 / 568;
+  background-color: var(--color-placeholder);
+  overflow: hidden;
+}
+
+.catImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Sash (large) ──
+   Anchored to the bottom of the image with a deliberate vertical offset
+   so the gradient and text bleed below the photo's bottom edge. */
+.sash {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -10cqi;
+  height: 22cqi;
+}
+
+.sashGradient {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100cqi;
+  height: 100%;
+  display: block;
+  /* gradient asset is white-to-transparent — stretch to sash dimensions */
+  object-fit: fill;
+}
+.sashGradientSmall { display: none; }
+
+.sashContent {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10cqi  4.5cqi 0 4.5cqi;
+  box-sizing: border-box;
+}
+
+.name {
+  font-family: var(--font-ballet);
+  font-weight: 400;
+  font-size: 9.5cqi;
+  line-height: 1;
+  color: var(--color-gold);
+  /* Ballet baseline sits a touch high — nudge so it visually centers */
+  transform: translateY(0.4cqi);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2em;
+  text-align: right;
+  color: var(--color-gold);
+  font-family: var(--font-nunito);
+  line-height: 1.25;
+}
+
+.metaTitle {
+  font-size: 1.7cqi;
+  font-weight: 500;
+}
+
+.metaDate {
+  font-size: 1.7cqi;
+  font-weight: 500;
+}
+
+/* ── Tablet ── */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .arrowLarge { height: 48px; }
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .main {
+    padding: 16px 0 80px;
+  }
+
+  .stage {
+    grid-template-columns: 1fr 1fr;
+    /* Sash is absolutely-positioned and overhangs the frame by ~33cqi
+       (≈33vw on mobile, since frame == viewport width). Row-gap must
+       exceed that overhang so the arrow row clears the sash. */
+    grid-template-areas:
+      "frame frame"
+      "prev  next";
+    column-gap: 0;
+    row-gap: calc(33vw + 24px);
+    padding-bottom: 20px;
+  }
+
+  .frame {
+    max-width: none;
+  }
+
+  .prev { justify-self: end; padding-right: 24px; }
+  .next { justify-self: start; padding-left: 24px; }
+
+  .arrowLarge { display: none; }
+  .arrowSmall {
+    display: block;
+    height: 40px;
+    width: auto;
+  }
+
+  /* Larger sash on mobile (baseline = viewport width).
+     Stacked, center-aligned per spec. */
+  .sash {
+    bottom: -33cqi;
+    height: 30cqi;
+  }
+
+  .sashGradientLarge { display: none; }
+  .sashGradientSmall {
+    display: block;
+    width: 100cqi;
+    height: 100%;
+  }
+
+  .sashContent {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 6cqi;
+    gap: 0.8cqi;
+  }
+
+  .name {
+    font-size: 14cqi;
+    transform: none;
+  }
+
+  .meta {
+    align-items: center;
+    text-align: center;
+    gap: 0.1em;
+  }
+
+  .metaTitle { font-size: 3.4cqi; }
+  .metaDate { font-size: 3.4cqi; }
+}

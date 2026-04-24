@@ -1,0 +1,159 @@
+.page {
+  min-height: 100vh;
+  padding: 56px 20px 96px;
+}
+
+.inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Header ── */
+.pageTitle {
+  font-family: var(--font-nunito);
+  font-size: 38px;
+  font-weight: 400;
+  color: var(--color-gold);
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.pageSubtitle {
+  font-family: var(--font-nunito);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--color-gold);
+  text-align: center;
+  opacity: 0.75;
+  margin-bottom: 48px;
+}
+
+/* ── Cards ── */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+}
+
+/* ── Card header ── */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.cardNumber {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--color-pink);
+  color: #fff;
+  font-family: var(--font-nunito);
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cardTitle {
+  font-family: var(--font-nunito);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+/* ── Rule list ── */
+.ruleList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ruleList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-nunito);
+  font-size: 14.5px;
+  font-weight: 400;
+  color: var(--color-gold);
+  line-height: 1.55;
+}
+
+.ruleList li::before {
+  content: '';
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-pink);
+  margin-top: 5px;
+}
+
+/* ── Vote buttons ── */
+.voteButtons {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0 10px 18px;
+}
+
+.voteBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 20px;
+  border: 1.5px solid var(--color-gold);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.voteBtnPrice {
+  font-family: var(--font-nunito);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+.voteBtnLabel {
+  font-family: var(--font-nunito);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-gold);
+  opacity: 0.7;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .page {
+    padding: 40px 16px 80px;
+  }
+
+  .pageTitle {
+    font-size: 30px;
+  }
+
+  .card {
+    padding: 22px 20px;
+  }
+
+  .cardTitle {
+    font-size: 18px;
+  }
+
+  .ruleList li {
+    font-size: 14px;
+  }
+}

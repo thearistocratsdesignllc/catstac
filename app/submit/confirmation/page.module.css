@@ -1,0 +1,203 @@
+.page {
+  min-height: 100vh;
+  padding: 56px 20px 96px;
+}
+
+.inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ── Header ── */
+.pageTitle {
+  font-family: var(--font-nunito);
+  font-size: 38px;
+  font-weight: 400;
+  color: var(--color-gold);
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.intro {
+  font-family: var(--font-nunito);
+  font-size: 14.5px;
+  font-weight: 400;
+  color: var(--color-gold);
+  line-height: 1.65;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+/* ── Card ── */
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px 32px 28px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.cardBody {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── Image / placeholder ── */
+.imageArea {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1.5px solid var(--color-placeholder);
+  border-radius: 10px;
+  background: #f7f5f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.uploadIcon {
+  color: var(--color-gold);
+  opacity: 0.55;
+}
+
+.placeholderLabel {
+  font-family: var(--font-nunito);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-gold);
+}
+
+.placeholderHint {
+  font-family: var(--font-nunito);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-gold);
+  opacity: 0.6;
+  margin-top: -4px;
+}
+
+.preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Direct-link column ── */
+.linkCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.fieldLabel {
+  font-family: var(--font-nunito);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-gold);
+}
+
+.input {
+  width: 100%;
+  border: 1.5px solid var(--color-gold);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-nunito);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-gold);
+  background: #fff;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--color-pink);
+}
+
+.copyBtn {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: 6px 0 0;
+  font-family: var(--font-nunito);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-pink);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.copyBtn:hover {
+  opacity: 0.75;
+}
+
+/* ── Back button ── */
+.backRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-pink);
+  color: #fff;
+  font-family: var(--font-nunito);
+  font-size: 17px;
+  font-weight: 700;
+  border: none;
+  border-radius: 100px;
+  padding: 14px 44px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.backBtn:hover {
+  opacity: 0.88;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .page {
+    padding: 40px 16px 80px;
+  }
+
+  .pageTitle {
+    font-size: 28px;
+  }
+
+  .card {
+    padding: 20px 18px 24px;
+  }
+
+  .cardBody {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .imageArea {
+    max-width: 220px;
+    margin: 0 auto;
+  }
+
+  .backBtn {
+    width: 100%;
+    padding: 14px 0;
+  }
+}

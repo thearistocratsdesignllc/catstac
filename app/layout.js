@@ -1,5 +1,6 @@
 import { Modak, Nunito, Ballet } from 'next/font/google'
 import './globals.css'
+import NavBar from './NavBar'
 
 const modak = Modak({
   weight: '400',
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${modak.variable} ${nunito.variable} ${ballet.variable}`}>
+        <NavBar />
         {children}
       </body>
     </html>
