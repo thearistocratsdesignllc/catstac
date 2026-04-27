@@ -128,6 +128,7 @@ Two distinct dates exist in this system — never conflate them:
 - `ai_status`: `'pending' | 'passed' | 'failed'`
 - `admin_status`: `'pending_review' | 'approved' | 'rejected'`
 - Only catestants where `admin_status = 'approved'` are visible to the public.
+- `is_stock` — true for pre-loaded stock cats used to fill the grid during the cold start period. Stock cats appear in the grid and are fully voteable but cannot win. The nightly cron only considers `is_stock = false` catestants when tallying winners.
 
 **`votes`**
 - `user_id` — not null. Login required to vote.
