@@ -115,6 +115,7 @@ Two distinct dates exist in this system — never conflate them:
 | `votes` | One row per vote cast. Login required — `user_id` is never null. |
 | `vote_credits` | Append-only ledger for purchased vote credits. Balance = `SUM(delta)` per `user_id`. |
 | `winners` | One row per winning cat per day. Ties produce multiple rows. |
+| `stock_cats` | Pre-loaded stock cats used to fill the grid during cold start. Pulled from here nightly by the cron job. |
 
 ### Key columns and rules
 
@@ -129,6 +130,14 @@ Two distinct dates exist in this system — never conflate them:
 - `admin_status`: `'pending_review' | 'approved' | 'rejected'`
 - Only catestants where `admin_status = 'approved'` are visible to the public.
 - `is_stock` — true for pre-loaded stock cats used to fill the grid during the cold start period. Stock cats appear in the grid and are fully voteable but cannot win. The nightly cron only considers `is_stock = false` catestants when tallying winners.
+
+**`stock_cats`**
+- Stores pre-loaded cat photos that fill the grid when real submissions are low.
+- `cat_name`, `cat_sex`, `photo_url`, `photo_storage_path` — same meaning as on `catestants`.
+- Photos live in the `stock-cats` Supabase Storage bucket.
+- No `voting_date` or `submission_id` — stock cats don't belong to a submission.
+- The nightly cron pulls from this table, copies rows into `catestants` with that day's `voting_date`, `is_stock = true`, and `admin_status = 'approved'`.
+- Stock cats are voteable but cannot win. The winner query always filters `is_stock = false`.
 
 **`votes`**
 - `user_id` — not null. Login required to vote.
