@@ -6,7 +6,7 @@ import styles from './page.module.css'
 
 export default async function CatestantPage({ params }) {
   const { id } = await params
-  const data = getCatNeighbors(id)
+  const data = await getCatNeighbors(id)
   if (!data) notFound()
   const { cat, prev, next } = data
 

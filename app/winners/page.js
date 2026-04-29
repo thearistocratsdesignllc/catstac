@@ -1,12 +1,15 @@
 import Link from 'next/link'
 import styles from './page.module.css'
-import { winners } from '../winnersData'
+import { getWinners } from '../winnersData'
 
 export const metadata = {
   title: 'Winners — Catstac',
 }
 
-export default function WinnersPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function WinnersPage() {
+  const winners = await getWinners()
   return (
     <main className={styles.main}>
       <p className={styles.pageTitle}>Look at the winning Catestants!</p>

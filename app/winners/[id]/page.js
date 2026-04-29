@@ -5,7 +5,7 @@ import styles from './page.module.css'
 
 export async function generateMetadata({ params }) {
   const { id } = await params
-  const winner = getWinnerById(id)
+  const winner = await getWinnerById(id)
   return {
     title: winner ? `${winner.name} — Cat of the Day | Catstac` : 'Catstac',
   }
@@ -13,7 +13,7 @@ export async function generateMetadata({ params }) {
 
 export default async function WinnerDetailPage({ params }) {
   const { id } = await params
-  const data = getWinnerNeighbors(id)
+  const data = await getWinnerNeighbors(id)
   if (!data) notFound()
   const { winner, prev, next } = data
 

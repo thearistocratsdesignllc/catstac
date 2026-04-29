@@ -1,9 +1,12 @@
 import Link from 'next/link'
 import styles from './page.module.css'
 import IntroModal from './IntroModal'
-import { cats } from './catsData'
+import { getTodaysCats } from './catsData'
 
-export default function Home() {
+export const dynamic = 'force-dynamic'
+
+export default async function Home() {
+  const cats = await getTodaysCats()
   return (
     <main className={styles.main}>
       <IntroModal />
