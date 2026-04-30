@@ -1,8 +1,39 @@
 'use client'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import styles from './HamburgerMenu.module.css'
 
 export default function HamburgerMenu({ isOpen, onClose }) {
+  const router = useRouter()
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    let active = true
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUser(data.user ?? null)
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => {
+      active = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    onClose()
+    router.refresh()
+  }
+
   return (
     <>
       <div
@@ -22,7 +53,15 @@ export default function HamburgerMenu({ isOpen, onClose }) {
           <Link href="/why" className={styles.navLink} onClick={onClose}>Why, Catstac?</Link>
         </nav>
         <div className={styles.bottomNav}>
-          <Link href="/signin" className={styles.navLink} onClick={onClose}>Sign In / Sign Out</Link>
+          {user ? (
+            <button type="button" className={styles.navLink} onClick={handleSignOut}>
+              Sign Out
+            </button>
+          ) : (
+            <Link href="/signin" className={styles.navLink} onClick={onClose}>
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </>

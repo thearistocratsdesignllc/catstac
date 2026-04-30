@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase/client'
+import { createClient } from '../lib/supabase/server'
 
 function formatCotdDate(dateStr) {
   if (!dateStr) return ''
@@ -17,6 +17,7 @@ function rowToWinner(row) {
 }
 
 export async function getWinners() {
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('winners')
     .select('id, cotd_date, tie_sequence, catestants ( cat_name, photo_url )')

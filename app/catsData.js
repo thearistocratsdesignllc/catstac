@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase/client'
+import { createClient } from '../lib/supabase/server'
 
 function pacificVotingDate(now = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -11,6 +11,7 @@ function pacificVotingDate(now = new Date()) {
 }
 
 export async function getTodaysCats() {
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from('catestants')
     .select('id, photo_url, created_at')

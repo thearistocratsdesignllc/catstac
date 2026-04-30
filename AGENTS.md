@@ -95,9 +95,19 @@ Schema lives in `supabase/migrations/001_initial_schema.sql`. All tables use UUI
 
 ### Connection
 
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser.
-- `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, server-side API routes only. Never expose to the browser.
-- Use `@supabase/supabase-js`. Browser-safe client: `lib/supabase/client.js`. Server-side client: `lib/supabase/server.js`.
+Three clients, one per environment. Pick by where the code runs and whether RLS should apply.
+
+| File | Builder | Key | Use it when |
+|---|---|---|---|
+| `lib/supabase/client.js` | `createBrowserClient` (`@supabase/ssr`) | anon | Client Components (`'use client'`). Reads the session from browser cookies; subject to RLS. |
+| `lib/supabase/server.js` | `createServerClient` (`@supabase/ssr`) | anon | Server Components, Route Handlers, Server Actions, middleware. `async` — returns a per-request client wired to Next's cookie store, so `auth.getUser()` works and RLS sees the logged-in user. |
+| `lib/supabase/admin.js` | `createClient` (`@supabase/supabase-js`) | service role | Server-only privileged work that must bypass RLS: writing to tables with no public write policy, the nightly cron, admin moderation. Exported as a singleton `supabaseAdmin`. Never import from a Client Component. |
+
+Env vars:
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser; consumed by `client.js` and `server.js`.
+- `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, consumed by `admin.js` only. Never expose to the browser.
+
+Session refresh: `proxy.js` (Next middleware) refreshes Supabase auth cookies on each request so `server.js` can read a fresh session — `server.js`'s `setAll` is a no-op when called from a Server Component because cookie writes happen there.
 
 ### Date column naming convention
 
