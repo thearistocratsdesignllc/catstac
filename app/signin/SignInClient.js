@@ -20,8 +20,6 @@ export default function SignInClient() {
     const callback = new URL('/auth/callback', window.location.origin)
     callback.searchParams.set('redirectTo', redirectTo)
 
-    console.log('[signin] signInWithOAuth redirectTo:', callback.toString())
-
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: callback.toString() },
