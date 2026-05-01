@@ -144,6 +144,32 @@
   opacity: 0.75;
 }
 
+/* ── Failed banner ── */
+.failedBanner {
+  background: #fff;
+  border: 1.5px solid var(--color-pink);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  font-family: var(--font-nunito);
+  font-size: 14px;
+  color: var(--color-gold);
+  line-height: 1.55;
+}
+
+.failedBanner strong {
+  color: var(--color-pink);
+}
+
+.failedBanner ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ── Back button ── */
 .backRow {
   display: flex;

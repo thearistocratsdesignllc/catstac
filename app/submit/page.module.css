@@ -379,6 +379,108 @@
   opacity: 0.85;
 }
 
+.submitBtn:disabled,
+.cancelBtn[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Banners ── */
+.errorBanner {
+  background: #fff;
+  border: 1.5px solid var(--color-pink);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  font-family: var(--font-nunito);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-pink);
+  line-height: 1.5;
+}
+
+.failedBanner {
+  background: #fff;
+  border: 1.5px solid var(--color-pink);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  font-family: var(--font-nunito);
+  font-size: 14px;
+  color: var(--color-gold);
+  line-height: 1.55;
+}
+
+.failedBanner strong {
+  color: var(--color-pink);
+}
+
+.failedBanner ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Loading overlay ── */
+.loadingOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(100, 97, 88, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.loadingCard {
+  background-color: var(--color-bg);
+  border: 1.5px solid rgba(132, 112, 0, 0.3);
+  border-radius: 20px;
+  padding: 40px 48px 36px;
+  max-width: 420px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--color-placeholder);
+  border-top-color: var(--color-pink);
+  animation: catstac-spin 0.9s linear infinite;
+}
+
+@keyframes catstac-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingTitle {
+  font-family: var(--font-nunito);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-gold);
+  margin: 0;
+}
+
+.loadingSub {
+  font-family: var(--font-nunito);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--color-gold);
+  opacity: 0.8;
+  margin: 0;
+}
+
 /* ── Mobile ── */
 @media (max-width: 640px) {
   .page {

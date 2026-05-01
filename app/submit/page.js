@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import styles from './page.module.css'
 
@@ -7,7 +8,7 @@ const MAX_CATS = 10
 let nextIdCounter = 2
 
 function newCat() {
-  return { id: nextIdCounter++, name: '', sex: 'tom', imageUrl: null }
+  return { id: nextIdCounter++, name: '', sex: 'tom', file: null, imageUrl: null }
 }
 
 function TrashIcon() {
@@ -36,6 +37,7 @@ function CatForm({ cat, index, showRemove, onRemove, onChange }) {
     const file = e.target.files?.[0]
     if (!file) return
     const url = URL.createObjectURL(file)
+    onChange('file', file)
     onChange('imageUrl', url)
   }
 
@@ -129,10 +131,14 @@ function CatForm({ cat, index, showRemove, onRemove, onChange }) {
 }
 
 export default function SubmitPage() {
-  const [cats, setCats] = useState([{ id: 1, name: '', sex: 'tom', imageUrl: null }])
+  const router = useRouter()
+  const [cats, setCats] = useState([{ id: 1, name: '', sex: 'tom', file: null, imageUrl: null }])
   const [email, setEmail] = useState('')
   const [instagram, setInstagram] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [failed, setFailed] = useState([])
 
   const addCat = () => {
     if (cats.length >= MAX_CATS) return
@@ -147,6 +153,81 @@ export default function SubmitPage() {
     setCats((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)))
   }, [])
 
+  const handleSubmit = async () => {
+    setError('')
+    setFailed([])
+
+    if (!email.trim()) {
+      setError('Please enter your email.')
+      return
+    }
+    if (!agreed) {
+      setError('Please agree to the terms before submitting.')
+      return
+    }
+    for (let i = 0; i < cats.length; i++) {
+      if (!cats[i].file) {
+        setError(`Catestant #${i + 1} is missing a photo.`)
+        return
+      }
+      if (!cats[i].name.trim()) {
+        setError(`Catestant #${i + 1} is missing a name.`)
+        return
+      }
+    }
+
+    const formData = new FormData()
+    formData.set('email', email.trim())
+    formData.set('instagram', instagram.trim())
+    formData.set('agreed', String(agreed))
+    cats.forEach((cat) => {
+      formData.append('catNames', cat.name.trim())
+      formData.append('catSexes', cat.sex)
+      formData.append('catPhotos', cat.file)
+    })
+
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/submit', { method: 'POST', body: formData })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        setError(data?.error || 'Something went wrong. Please try again.')
+        setSubmitting(false)
+        return
+      }
+
+      const passedCats = data.passed || []
+      const failedCats = data.failed || []
+
+      if (passedCats.length === 0) {
+        setError(
+          'None of your cats passed validation. Please check the issues below and try again.',
+        )
+        setFailed(failedCats)
+        setSubmitting(false)
+        return
+      }
+
+      // Some or all passed — proceed to confirmation. The page reads this on mount.
+      sessionStorage.setItem(
+        'catstac_submission_result',
+        JSON.stringify({
+          submission_id: data.submission_id,
+          voting_date: data.voting_date,
+          cotd_date: data.cotd_date,
+          passed: passedCats,
+          failed: failedCats,
+        }),
+      )
+      router.push('/submit/confirmation')
+    } catch (err) {
+      console.error(err)
+      setError('Network error. Please try again.')
+      setSubmitting(false)
+    }
+  }
+
   return (
     <main className={styles.page}>
       <div className={styles.inner}>
@@ -160,6 +241,19 @@ export default function SubmitPage() {
           </p>
           <p>While voting is open, Catestant names will not be shown, and vote totals won&rsquo;t be shown.</p>
         </div>
+
+        {error && <div className={styles.errorBanner} role="alert">{error}</div>}
+
+        {failed.length > 0 && (
+          <div className={styles.failedBanner}>
+            <strong>These didn&rsquo;t pass validation:</strong>
+            <ul>
+              {failed.map((f, idx) => (
+                <li key={idx}><strong>{f.name}:</strong> {f.reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className={styles.catForms}>
           {cats.map((cat, index) => (
@@ -176,7 +270,7 @@ export default function SubmitPage() {
 
         {cats.length < MAX_CATS && (
           <div className={styles.addRow}>
-            <button className={styles.addBtn} onClick={addCat} type="button">
+            <button className={styles.addBtn} onClick={addCat} type="button" disabled={submitting}>
               + Add another Catestant
             </button>
           </div>
@@ -230,12 +324,27 @@ export default function SubmitPage() {
         </div>
 
         <div className={styles.actions}>
-          <Link href="/" className={styles.cancelBtn}>Cancel</Link>
-          <button className={styles.submitBtn} type="button">
-            Submit to the Catstac &rarr;
+          <Link href="/" className={styles.cancelBtn} aria-disabled={submitting}>Cancel</Link>
+          <button
+            className={styles.submitBtn}
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? 'Validating your cats…' : 'Submit to the Catstac →'}
           </button>
         </div>
       </div>
+
+      {submitting && (
+        <div className={styles.loadingOverlay} role="status" aria-live="polite">
+          <div className={styles.loadingCard}>
+            <div className={styles.spinner} aria-hidden="true" />
+            <p className={styles.loadingTitle}>Validating your cats…</p>
+            <p className={styles.loadingSub}>This can take a few seconds per cat.</p>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

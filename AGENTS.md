@@ -27,12 +27,14 @@ For visual conventions (colors, typography, modal pattern, card pattern, respons
 | `/catestant/[id]` | `app/catestant/[id]/page.js` | Cat detail w/ prev/next arrows + `VoteButton`. |
 | `/winners` | `app/winners/page.js` | Grid of past winners with inline name/date sash. |
 | `/winners/[id]` | `app/winners/[id]/page.js` | Winner detail with large sash (name in Ballet) and prev/next arrows. |
-| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). |
+| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. |
 | `/submit/confirmation` | `app/submit/confirmation/page.js` | Post-submit thank-you with one share card per submitted cat. Mock data lives at the top of the file. |
 | `/rules` | `app/rules/page.js` | Static rules content. |
 | `/why` | `app/why/page.js` | Founder letter. |
+| `/signin` | `app/signin/page.js` + `app/signin/SignInClient.js` | Google OAuth sign-in. Reads `redirectTo` from the query string and threads it through the callback. |
+| `/auth/callback` | `app/auth/callback/route.js` | OAuth code-exchange handler. Calls `supabase.auth.exchangeCodeForSession(code)` then redirects to `redirectTo` (must start with `/`). |
 
-Routes referenced in the UI but not yet implemented: `/signin` (linked from hamburger menu), `/terms` (linked from submit checkbox).
+Routes referenced in the UI but not yet implemented: `/terms` (linked from submit checkbox).
 
 ## Shared components
 
@@ -84,10 +86,56 @@ All raster assets live in `public/assets/`. Many have paired `_large` / `_small`
 
 ## Things not yet built
 
-- **Auth** — `/signin` route, session handling, user-scoped vote storage.
+- **Auth UI polish** — sign-out wiring in `HamburgerMenu`, user-scoped daily-vote storage (currently still in `localStorage`). Sign-in itself is implemented; see *Auth* below.
 - **Payments** — wiring `VoteUsedModal`'s `onPurchase` prop to a checkout flow; persisting purchased vote balances.
 - **Backend** — replacing `catsData.js` / `winnersData.js` with real data sources; persisting submissions from `/submit`.
 - **Terms page** — linked from the submit form's agreement checkbox.
+
+## Auth
+
+Google OAuth via Supabase, using the `@supabase/ssr` cookie-based session model.
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/signin/page.js` | Server Component shell for `/signin`. |
+| `app/signin/SignInClient.js` | Client Component with the "Continue with Google" button. Builds `${origin}/auth/callback?redirectTo=…` and passes it as `options.redirectTo` to `supabase.auth.signInWithOAuth({ provider: 'google' })`. |
+| `app/auth/callback/route.js` | Route Handler that runs after Google redirects back. Reads `?code=…`, calls `exchangeCodeForSession`, then redirects to the original `redirectTo` (must start with `/`; on error redirects to `/signin?error=auth`). |
+| `proxy.js` | Next 16 proxy (the renamed `middleware` convention — see below). Refreshes Supabase auth cookies on every matched request and gates `PROTECTED_PATHS` (currently `['/submit']`), redirecting unauthenticated users to `/signin?redirectTo=<path>`. |
+| `lib/supabase/server.js` | Used by the callback handler to write session cookies. |
+| `lib/supabase/client.js` | Used by `SignInClient.js` to kick off the OAuth flow. |
+
+### Flow
+
+1. User clicks "Continue with Google" on `/signin`. The client builds `https://<host>/auth/callback?redirectTo=<original-path>` and asks Supabase to start OAuth with that as the post-auth redirect.
+2. Supabase sends the user to Google; Google bounces back to `https://<project>.supabase.co/auth/v1/callback`; Supabase then 302s the browser to the `redirectTo` we provided **only if it's on the project's Redirect URL allowlist** — otherwise it silently falls back to the project's Site URL.
+3. `app/auth/callback/route.js` exchanges the `code` for a session (which sets the `sb-*` cookies via `server.js`) and redirects to the original target.
+4. On every subsequent request, `proxy.js` calls `supabase.auth.getUser()` so the session cookie stays fresh.
+
+### Supabase project
+
+- Project URL: `https://thqqsqqbnusinzlqisss.supabase.co` (this is the value of `NEXT_PUBLIC_SUPABASE_URL`).
+- Dashboard → **Authentication → URL Configuration**:
+  - **Site URL** must be the canonical production host (see canonical-host note below).
+  - **Redirect URLs** allowlist must include `<canonical>/auth/callback` plus any preview / dev origins (`http://localhost:3000/auth/callback`, Vercel preview URLs). Anything not on this list is dropped and the user is bounced to the Site URL with `?code=…` stuck on `/`.
+
+### Canonical host (www vs non-www)
+
+Pick **one** canonical origin and use it everywhere. Auth cookies are scoped to the host that set them, so `www.catstac.com` and `catstac.com` are two separate sessions; an OAuth code exchanged on one host produces cookies the other host can't read.
+
+The canonical host for Catstac is the apex: `https://catstac.com`. To keep this consistent:
+
+- Supabase **Site URL** = `https://catstac.com`.
+- Supabase **Redirect URLs** allowlist contains `https://catstac.com/auth/callback` (not the www variant).
+- DNS / Vercel must permanently redirect `www.catstac.com` → `catstac.com` **before** the OAuth flow starts, so users never reach `/signin` on the wrong host.
+- Any local copy-paste of the production URL into env vars or test scripts should drop the `www.`.
+
+If you ever flip the canonical to `www.catstac.com`, all four bullets above must change together.
+
+### Proxy file naming
+
+In Next.js 16 the `middleware.js` convention was renamed to `proxy.js` (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`). The file lives at the project root, exports a function named `proxy` (or default), and declares `config.matcher`. Renaming it to `middleware.js` will silently break it.
 
 ## Database (Supabase)
 
@@ -100,14 +148,14 @@ Three clients, one per environment. Pick by where the code runs and whether RLS 
 | File | Builder | Key | Use it when |
 |---|---|---|---|
 | `lib/supabase/client.js` | `createBrowserClient` (`@supabase/ssr`) | anon | Client Components (`'use client'`). Reads the session from browser cookies; subject to RLS. |
-| `lib/supabase/server.js` | `createServerClient` (`@supabase/ssr`) | anon | Server Components, Route Handlers, Server Actions, middleware. `async` — returns a per-request client wired to Next's cookie store, so `auth.getUser()` works and RLS sees the logged-in user. |
+| `lib/supabase/server.js` | `createServerClient` (`@supabase/ssr`) | anon | Server Components, Route Handlers, Server Actions, `proxy.js`. `async` — returns a per-request client wired to Next's cookie store, so `auth.getUser()` works and RLS sees the logged-in user. |
 | `lib/supabase/admin.js` | `createClient` (`@supabase/supabase-js`) | service role | Server-only privileged work that must bypass RLS: writing to tables with no public write policy, the nightly cron, admin moderation. Exported as a singleton `supabaseAdmin`. Never import from a Client Component. |
 
 Env vars:
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser; consumed by `client.js` and `server.js`.
 - `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, consumed by `admin.js` only. Never expose to the browser.
 
-Session refresh: `proxy.js` (Next middleware) refreshes Supabase auth cookies on each request so `server.js` can read a fresh session — `server.js`'s `setAll` is a no-op when called from a Server Component because cookie writes happen there.
+Session refresh: `proxy.js` (the Next 16 proxy file — formerly called middleware) refreshes Supabase auth cookies on each request so `server.js` can read a fresh session. `server.js`'s `setAll` swallows errors silently, since cookie writes from a Server Component throw — the proxy is responsible for those writes instead. See *Auth* below for the full sign-in flow.
 
 ### Date column naming convention
 

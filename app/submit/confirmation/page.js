@@ -1,29 +1,19 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import styles from './page.module.css'
 
-// Mock data — replace with real submissions once the backend is wired up.
-// Trim to one entry to preview the single-cat confirmation layout.
-const MOCK_SUBMISSIONS = [
-  { id: '1234567', name: 'Catestant A', imageUrl: null, date: 'mmddyyyy' },
-  { id: '7654321', name: 'Catestant B', imageUrl: null, date: 'mmddyyyy' },
-]
+const SITE_ORIGIN = 'https://www.catstac.com'
 
-function UploadIcon() {
-  return (
-    <svg width="38" height="38" viewBox="0 0 38 38" fill="none" aria-hidden="true" className={styles.uploadIcon}>
-      <rect x="3" y="5" width="32" height="26" rx="3" stroke="currentColor" strokeWidth="1.5"/>
-      <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M3 25l9-9 5 5 4-4 9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M26 3v8M23 6l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
+function formatDisplayDate(yyyyMmDd) {
+  if (!yyyyMmDd) return ''
+  const [y, m, d] = yyyyMmDd.split('-')
+  return `${m}/${d}/${y}`
 }
 
-function SubmissionCard({ submission }) {
+function SubmissionCard({ cat }) {
   const [copied, setCopied] = useState(false)
-  const url = `https://www.catstac.com/${submission.date}/${submission.id}`
+  const url = `${SITE_ORIGIN}/catestant/${cat.id}`
 
   const handleCopy = async () => {
     try {
@@ -39,21 +29,17 @@ function SubmissionCard({ submission }) {
     <div className={styles.card}>
       <div className={styles.cardBody}>
         <div className={styles.imageArea}>
-          {submission.imageUrl ? (
-            <img src={submission.imageUrl} className={styles.preview} alt={submission.name} />
-          ) : (
-            <>
-              <UploadIcon />
-              <span className={styles.placeholderLabel}>Upload Cat Pic</span>
-              <span className={styles.placeholderHint}>PNG or JPG</span>
-            </>
-          )}
+          {cat.photo_url ? (
+            <img src={cat.photo_url} className={styles.preview} alt={cat.name} />
+          ) : null}
         </div>
 
         <div className={styles.linkCol}>
-          <label className={styles.fieldLabel} htmlFor={`link-${submission.id}`}>Direct Link</label>
+          <label className={styles.fieldLabel} htmlFor={`link-${cat.id}`}>
+            Direct Link to {cat.name}
+          </label>
           <input
-            id={`link-${submission.id}`}
+            id={`link-${cat.id}`}
             className={styles.input}
             type="text"
             value={url}
@@ -69,6 +55,41 @@ function SubmissionCard({ submission }) {
 }
 
 export default function ConfirmationPage() {
+  const [result, setResult] = useState(null)
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('catstac_submission_result')
+      if (raw) setResult(JSON.parse(raw))
+    } catch {
+      // ignore parse errors
+    }
+    setHydrated(true)
+  }, [])
+
+  if (!hydrated) return null
+
+  if (!result || !result.passed?.length) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.inner}>
+          <h1 className={styles.pageTitle}>No recent submission</h1>
+          <div className={styles.intro}>
+            <p>We don&rsquo;t have a submission to confirm here. Submit a cat to get started.</p>
+          </div>
+          <div className={styles.backRow}>
+            <Link href="/submit" className={styles.backBtn}>Submit a Catestant</Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  const { passed, failed = [], cotd_date } = result
+  const displayDate = formatDisplayDate(cotd_date)
+  const catsLabel = passed.length === 1 ? 'cat is' : 'cats are'
+
   return (
     <main className={styles.page}>
       <div className={styles.inner}>
@@ -76,19 +97,30 @@ export default function ConfirmationPage() {
 
         <div className={styles.intro}>
           <p>
-            Your cat is eligible to be the Cat of the Day tomorrow, mm/dd/yyyy. Voting will be open
+            Your {catsLabel} eligible to be the Cat of the Day tomorrow{displayDate ? `, ${displayDate}` : ''}. Voting will be open
             until 11:59:59pm Pacific time today. We&rsquo;ll send you an email to let you know how they did.
           </p>
           <p>
-            While your cat is sure to get some attention for their cuteness, it&rsquo;ll help their chances
-            if you put the word out, so be sure to copy the link to their Catestant page, and post it
-            where their friends will see it!
+            While your {passed.length === 1 ? 'cat is' : 'cats are'} sure to get some attention for {passed.length === 1 ? 'their' : 'their'} cuteness, it&rsquo;ll help {passed.length === 1 ? 'their' : 'their'} chances
+            if you put the word out, so be sure to copy the {passed.length === 1 ? 'link' : 'links'} below and post {passed.length === 1 ? 'it' : 'them'}
+            {' '}where {passed.length === 1 ? 'their' : 'their'} friends will see {passed.length === 1 ? 'it' : 'them'}!
           </p>
         </div>
 
+        {failed.length > 0 && (
+          <div className={styles.failedBanner}>
+            <strong>A heads-up:</strong> these didn&rsquo;t pass validation and aren&rsquo;t in the contest:
+            <ul>
+              {failed.map((f, idx) => (
+                <li key={idx}><strong>{f.name}:</strong> {f.reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className={styles.cards}>
-          {MOCK_SUBMISSIONS.map((s) => (
-            <SubmissionCard key={s.id} submission={s} />
+          {passed.map((cat) => (
+            <SubmissionCard key={cat.id} cat={cat} />
           ))}
         </div>
 
