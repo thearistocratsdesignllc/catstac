@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
-const STORAGE_BUCKET = 'catestants'
 const VALIDATION_MODEL = 'gpt-4o-mini'
 
 // Pacific-time YYYY-MM-DD for the voting_date column.
@@ -31,13 +30,7 @@ function addOneDay(yyyyMmDd) {
   return `${yy}-${mm}-${dd}`
 }
 
-function extensionFor(file) {
-  const fromName = file.name?.split('.').pop()?.toLowerCase()
-  if (fromName === 'jpg' || fromName === 'jpeg') return 'jpg'
-  if (fromName === 'png') return 'png'
-  if (file.type === 'image/png') return 'png'
-  return 'jpg'
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 async function validateCatPhoto(openai, photoUrl) {
   const response = await openai.chat.completions.create({
@@ -108,20 +101,18 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   }
 
-  // 2. Parse form data
-  let formData
+  // 2. Parse JSON body
+  let body
   try {
-    formData = await request.formData()
+    body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
-  const email = (formData.get('email') || '').toString().trim()
-  const instagramRaw = (formData.get('instagram') || '').toString().trim()
-  const agreed = formData.get('agreed') === 'true'
-  const names = formData.getAll('catNames').map((n) => n.toString().trim())
-  const sexes = formData.getAll('catSexes').map((s) => s.toString())
-  const photos = formData.getAll('catPhotos').filter((p) => p instanceof File)
+  const email = (body?.email || '').toString().trim()
+  const instagramRaw = (body?.instagram || '').toString().trim()
+  const agreed = body?.agreed === true
+  const cats = Array.isArray(body?.cats) ? body.cats : []
 
   if (!email) {
     return NextResponse.json({ error: 'Email is required.' }, { status: 400 })
@@ -129,33 +120,54 @@ export async function POST(request) {
   if (!agreed) {
     return NextResponse.json({ error: 'You must agree to the terms.' }, { status: 400 })
   }
-  if (
-    photos.length === 0 ||
-    photos.length !== names.length ||
-    photos.length !== sexes.length
-  ) {
-    return NextResponse.json(
-      { error: 'Each cat needs a photo, name, and sex.' },
-      { status: 400 },
-    )
+  if (cats.length === 0) {
+    return NextResponse.json({ error: 'At least one cat is required.' }, { status: 400 })
   }
-  for (let i = 0; i < photos.length; i++) {
-    if (!names[i]) {
+
+  // Validate each cat payload + verify the storage path is in the user's folder.
+  // The storage RLS policy already enforces this on upload, but a malicious
+  // client could still send a URL pointing at someone else's photo — reject it here.
+  const userPrefix = `${user.id}/`
+  for (let i = 0; i < cats.length; i++) {
+    const c = cats[i]
+    if (!c || typeof c !== 'object') {
+      return NextResponse.json(
+        { error: `Catestant #${i + 1} is malformed.` },
+        { status: 400 },
+      )
+    }
+    if (!c.id || typeof c.id !== 'string' || !UUID_RE.test(c.id)) {
+      return NextResponse.json(
+        { error: `Catestant #${i + 1} is missing a valid id.` },
+        { status: 400 },
+      )
+    }
+    if (!c.name || typeof c.name !== 'string' || !c.name.trim()) {
       return NextResponse.json(
         { error: `Catestant #${i + 1} is missing a name.` },
         { status: 400 },
       )
     }
-    if (sexes[i] !== 'tom' && sexes[i] !== 'queen') {
+    if (c.sex !== 'tom' && c.sex !== 'queen') {
       return NextResponse.json(
         { error: `Catestant #${i + 1} has an invalid sex.` },
         { status: 400 },
       )
     }
-    if (!photos[i].size) {
+    if (!c.photo_url || typeof c.photo_url !== 'string') {
       return NextResponse.json(
-        { error: `Catestant #${i + 1} is missing a photo.` },
+        { error: `Catestant #${i + 1} is missing a photo URL.` },
         { status: 400 },
+      )
+    }
+    if (
+      !c.photo_storage_path ||
+      typeof c.photo_storage_path !== 'string' ||
+      !c.photo_storage_path.startsWith(userPrefix)
+    ) {
+      return NextResponse.json(
+        { error: `Catestant #${i + 1} has an invalid photo path.` },
+        { status: 403 },
       )
     }
   }
@@ -184,36 +196,18 @@ export async function POST(request) {
     )
   }
 
-  // 4. Per-cat: upload, insert pending row, validate, update row
+  // 4. Per-cat: insert pending row, validate, update row.
+  // The photo is already in storage by this point — uploaded by the browser.
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   const passed = []
   const failed = []
 
-  for (let i = 0; i < photos.length; i++) {
-    const photo = photos[i]
-    const name = names[i]
-    const sex = sexes[i]
-    const ext = extensionFor(photo)
-    const catestantId = crypto.randomUUID()
-    const storagePath = `${submission.id}/${catestantId}.${ext}`
-
-    // Upload
-    const buffer = Buffer.from(await photo.arrayBuffer())
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(STORAGE_BUCKET)
-      .upload(storagePath, buffer, {
-        contentType: photo.type || 'image/jpeg',
-        upsert: false,
-      })
-    if (uploadError) {
-      console.error('upload failed', uploadError)
-      failed.push({ name, reason: 'Upload failed. Please try again.' })
-      continue
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabaseAdmin.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath)
+  for (const cat of cats) {
+    const name = cat.name.trim()
+    const sex = cat.sex
+    const catestantId = cat.id
+    const photoUrl = cat.photo_url
+    const storagePath = cat.photo_storage_path
 
     // Insert pending row
     const { data: catRow, error: insertError } = await supabaseAdmin
@@ -224,7 +218,7 @@ export async function POST(request) {
         voting_date: votingDate,
         cat_name: name,
         cat_sex: sex,
-        photo_url: publicUrl,
+        photo_url: photoUrl,
         photo_storage_path: storagePath,
         is_stock: false,
         ai_status: 'pending',
@@ -242,10 +236,9 @@ export async function POST(request) {
     // Validate via OpenAI
     let result
     try {
-      result = await validateCatPhoto(openai, publicUrl)
+      result = await validateCatPhoto(openai, photoUrl)
     } catch (err) {
       console.error('openai validation failed', err)
-      // Leave row at ai_status=pending so it lands in the manual queue.
       failed.push({
         name,
         reason: 'Photo could not be validated automatically. It will be reviewed manually.',
@@ -269,7 +262,7 @@ export async function POST(request) {
       passed.push({
         id: catestantId,
         name,
-        photo_url: publicUrl,
+        photo_url: photoUrl,
       })
     } else {
       const reason = summarizeFailure(result)

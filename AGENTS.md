@@ -27,13 +27,13 @@ For visual conventions (colors, typography, modal pattern, card pattern, respons
 | `/catestant/[id]` | `app/catestant/[id]/page.js` | Cat detail w/ prev/next arrows + `VoteButton`. |
 | `/winners` | `app/winners/page.js` | Grid of past winners with inline name/date sash. |
 | `/winners/[id]` | `app/winners/[id]/page.js` | Winner detail with large sash (name in Ballet) and prev/next arrows. |
-| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. POSTs `FormData` to `/api/submit` and shows a "Validating your cats…" overlay while the request is in flight. |
+| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. Uploads each photo directly to the `catestants` Storage bucket from the browser (sidesteps Vercel's 4.5MB API body limit), then POSTs JSON `{ email, instagram, agreed, cats: [{ id, name, sex, photo_url, photo_storage_path }] }` to `/api/submit` and shows a "Validating your cats…" overlay while the request is in flight. |
 | `/submit/confirmation` | `app/submit/confirmation/page.js` | Post-submit thank-you with one share card per *passing* cat plus an inline callout for any that failed AI validation. Reads the result from `sessionStorage.catstac_submission_result` (written by `/submit` immediately before `router.push`). Renders an empty state if the storage key is absent (e.g. direct-URL navigation). |
 | `/rules` | `app/rules/page.js` | Static rules content. |
 | `/why` | `app/why/page.js` | Founder letter. |
 | `/signin` | `app/signin/page.js` + `app/signin/SignInClient.js` | Google OAuth sign-in. Reads `redirectTo` from the query string and threads it through the callback. |
 | `/auth/callback` | `app/auth/callback/route.js` | OAuth code-exchange handler. Calls `supabase.auth.exchangeCodeForSession(code)` then redirects to `redirectTo` (must start with `/`). |
-| `/api/submit` | `app/api/submit/route.js` | Auth-gated POST handler for the submission form. Creates the `submissions` row, uploads each photo to the `catestants` storage bucket, inserts a `pending` `catestants` row, runs OpenAI validation, then updates each row with `ai_status = 'passed' \| 'failed'`. Returns `{ submission_id, voting_date, cotd_date, passed, failed }`. |
+| `/api/submit` | `app/api/submit/route.js` | Auth-gated POST handler for the submission form. Accepts JSON (photos are already in Storage from the browser upload). Creates the `submissions` row, inserts a `pending` `catestants` row per cat, runs OpenAI validation against the public photo URL, then updates each row with `ai_status = 'passed' \| 'failed'`. Returns `{ submission_id, voting_date, cotd_date, passed, failed }`. |
 
 Routes referenced in the UI but not yet implemented: `/terms` (linked from submit checkbox).
 
@@ -147,25 +147,33 @@ End-to-end path from the `/submit` form to a row in `catestants`.
 
 | File | Role |
 |---|---|
-| `app/submit/page.js` | Client form. Stores the `File` object alongside the preview URL. On submit, builds a `FormData` (parallel `catNames` / `catSexes` / `catPhotos` keys, plus `email` / `instagram` / `agreed`) and `fetch`es `/api/submit`. Renders a full-screen "Validating your cats…" overlay (modal-style, see `design.md`) while the request is in flight, plus inline error / "didn't pass" banners. |
-| `app/api/submit/route.js` | Auth-gated POST handler. All DB writes use `supabaseAdmin`; only `auth.getUser()` uses the cookie SSR client. |
+| `app/submit/page.js` | Client form. Stores the `File` object alongside the preview URL. On submit, generates a UUID per cat, uploads each photo directly to `catestants/<user_id>/<catestant_id>.<ext>` via the browser Supabase client (`Promise.all` over the cat list), then POSTs JSON `{ email, instagram, agreed, cats: [{ id, name, sex, photo_url, photo_storage_path }] }` to `/api/submit`. Renders a full-screen "Validating your cats…" overlay (modal-style, see `design.md`) while the upload + validation are in flight, plus inline error / "didn't pass" banners. Validation errors scroll the banner into view. |
+| `app/api/submit/route.js` | Auth-gated POST handler. Parses JSON, verifies each `photo_storage_path` starts with `<user.id>/` (defense in depth — RLS already enforces this on upload). All DB writes use `supabaseAdmin`; only `auth.getUser()` uses the cookie SSR client. |
 | `app/submit/confirmation/page.js` | Reads `sessionStorage.catstac_submission_result` on mount; renders one share card per passing cat plus a "didn't pass validation" callout for failed cats. Direct-link URLs are `https://www.catstac.com/catestant/<id>`. |
-| `supabase/migrations/002_storage_buckets.sql` | Creates the `catestants` bucket. |
+| `supabase/migrations/002_storage_buckets.sql` | Creates the public `catestants` bucket and the `select` policy on `storage.objects` for it. |
+| `supabase/migrations/003_storage_uploads.sql` | Adds the `insert` policy on `storage.objects` that lets authenticated users upload to their own folder (`<user_id>/...`) within the `catestants` bucket. Required for the browser-direct upload flow. |
+
+### Client flow (`app/submit/page.js`)
+
+The browser does the upload itself so the API request stays small (Vercel limits API route bodies to 4.5MB):
+
+1. **Validate locally.** Email, terms, per-cat photo + name. On any miss, `showError(...)` sets the banner and `scrollIntoView` brings it into view.
+2. **Get the session.** `createClient()` (browser) → `supabase.auth.getUser()`. If no user, error out (the proxy normally prevents this, but defend anyway).
+3. **Upload all photos in parallel.** For each cat: generate `crypto.randomUUID()`, derive `<ext>` from the file (jpg/png), upload to `catestants/<user_id>/<catestant_id>.<ext>`, then resolve `getPublicUrl(...)`. Storage RLS (migration 003) enforces that the path's first folder matches `auth.uid()`. If any upload fails, abort the whole submit with an error.
+4. **POST JSON to `/api/submit`.** Body: `{ email, instagram, agreed, cats: [{ id, name, sex, photo_url, photo_storage_path }] }`.
 
 ### Server flow (`app/api/submit/route.js`)
 
 1. **Auth gate.** `await createClient()` → `supabase.auth.getUser()`. If no user, return 401. (The route isn't in `proxy.js`'s `PROTECTED_PATHS`, so the proxy doesn't redirect — the route enforces auth itself.)
-2. **Parse + validate.** Pull `email`, `instagram` (strip leading `@`), `agreed`, and parallel `getAll('catNames' / 'catSexes' / 'catPhotos')`. Reject mismatched-length arrays, missing files, missing names, invalid `cat_sex`, missing email, missing consent — each with a 400 + human-readable message.
-3. **Compute `voting_date`.** Pacific-time `YYYY-MM-DD` via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`. `cotd_date` is `voting_date + 1 day`, returned to the client for display only — the row in `winners` is the source of truth, written by the nightly cron.
-4. **Insert `submissions` row.** `supabaseAdmin.from('submissions').insert({...}).select().single()`. If this fails, return 500 — no per-cat work happens.
-5. **Per-cat loop.** For each cat, in order:
-   1. Generate a UUID for the catestant up front (`crypto.randomUUID()`) so the storage path can include it.
-   2. Upload to `catestants/<submission_id>/<catestant_id>.<ext>` via `supabaseAdmin.storage.from('catestants').upload(...)`. Extension comes from the file name (jpg/png) with a content-type fallback.
-   3. Resolve the public URL (`getPublicUrl`) — the bucket is public, so this URL is what gets stored in `catestants.photo_url` and what OpenAI fetches.
-   4. Insert the `catestants` row with `ai_status = 'pending'`, `admin_status = 'pending_review'`, `is_stock = false`.
-   5. Call OpenAI vision (`gpt-4o-mini`, JSON-schema response format with `contains_cat` / `has_humans` / `is_ai_generated` / `reason`). Pass = `contains_cat && !has_humans && !is_ai_generated`.
-   6. **Update — never delete.** Pass → `ai_status = 'passed'`, full result in `ai_result`, `ai_validated_at = now()`. Fail → `ai_status = 'failed'`, full result in `ai_result`. `admin_status` stays `pending_review` either way; the failed row is what populates the manual-review queue. If OpenAI itself errors out, the row is left at `ai_status = 'pending'` and the cat is reported to the client as "will be reviewed manually."
-6. **Response.** `{ submission_id, voting_date, cotd_date, passed: [{ id, name, photo_url }], failed: [{ name, reason }] }`. Failure reasons are pre-formatted human-readable strings composed from the boolean flags (e.g. "No cat detected. A human is visible.").
+2. **Parse + validate.** Read JSON. Check `email`, `instagram` (strip leading `@`), `agreed`, and the `cats` array. For each cat: require a valid UUID `id`, non-empty `name`, `sex` ∈ `{tom, queen}`, `photo_url`, and `photo_storage_path`. Reject with 400 + human-readable message on any miss.
+3. **Authorize photo paths.** Each `photo_storage_path` must start with `<user.id>/`. Storage RLS already prevents writing outside that prefix on upload, but a malicious client could still POST a URL pointing at someone else's photo — the server rejects with 403.
+4. **Compute `voting_date`.** Pacific-time `YYYY-MM-DD` via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`. `cotd_date` is `voting_date + 1 day`, returned to the client for display only — the row in `winners` is the source of truth, written by the nightly cron.
+5. **Insert `submissions` row.** `supabaseAdmin.from('submissions').insert({...}).select().single()`. If this fails, return 500 — no per-cat work happens.
+6. **Per-cat loop.** For each cat, in order:
+   1. Insert the `catestants` row using the client-supplied `id`, `photo_url`, `photo_storage_path`, with `ai_status = 'pending'`, `admin_status = 'pending_review'`, `is_stock = false`. The catestant primary key matching the storage path's UUID is what keeps row and object aligned.
+   2. Call OpenAI vision (`gpt-4o-mini`, JSON-schema response format with `contains_cat` / `has_humans` / `is_ai_generated` / `reason`) against `photo_url`. Pass = `contains_cat && !has_humans && !is_ai_generated`.
+   3. **Update — never delete.** Pass → `ai_status = 'passed'`, full result in `ai_result`, `ai_validated_at = now()`. Fail → `ai_status = 'failed'`, full result in `ai_result`. `admin_status` stays `pending_review` either way; the failed row is what populates the manual-review queue. If OpenAI itself errors out, the row is left at `ai_status = 'pending'` and the cat is reported to the client as "will be reviewed manually." If the API call fails entirely after the photo is in Storage, the orphaned object is left for an admin sweep — same trade-off as before.
+7. **Response.** `{ submission_id, voting_date, cotd_date, passed: [{ id, name, photo_url }], failed: [{ name, reason }] }`. Failure reasons are pre-formatted human-readable strings composed from the boolean flags (e.g. "No cat detected. A human is visible.").
 
 ### Client outcomes (`app/submit/page.js`)
 
@@ -177,15 +185,20 @@ End-to-end path from the `/submit` form to a row in `catestants`.
 
 ### Storage bucket
 
-Bucket name: `catestants`, public. RLS on `storage.objects`: a `select` policy scoped to `bucket_id = 'catestants'`. Writes happen exclusively through the service-role client (`supabaseAdmin.storage.from('catestants').upload(...)`), which bypasses RLS — there are no public insert/update/delete policies on purpose. Stock cats use a separate `stock-cats` bucket (mentioned in `001`'s comments; bucket creation is out of scope for this migration since the cron job manages it).
+Bucket name: `catestants`, public. RLS on `storage.objects`:
+- `select` policy scoped to `bucket_id = 'catestants'` (migration 002) — anyone can read the public URLs.
+- `insert` policy scoped to `bucket_id = 'catestants' AND (storage.foldername(name))[1] = auth.uid()::text` (migration 003) — authenticated users can upload, but only into a folder named after their own UID. No public update or delete policy. The service-role client still bypasses RLS for any admin housekeeping.
 
-Storage path convention: `<submission_id>/<catestant_id>.<ext>`. Both IDs are UUIDs, so paths are inherently unique. The same path is stored on the `catestants` row as `photo_storage_path`, and the corresponding `getPublicUrl(...)` result is stored as `photo_url`.
+Stock cats use a separate `stock-cats` bucket (mentioned in `001`'s comments; bucket creation is out of scope for this migration since the cron job manages it).
+
+Storage path convention: `<user_id>/<catestant_id>.<ext>`. Both IDs are UUIDs, so paths are inherently unique. The catestant_id in the path matches the `catestants.id` of the corresponding row (the browser generates it before the upload and the API route inserts the row with that same id). The same path is stored on the `catestants` row as `photo_storage_path`, and the corresponding `getPublicUrl(...)` result is stored as `photo_url`.
 
 ## Database (Supabase)
 
 Schema lives in `supabase/migrations/`:
 - `001_initial_schema.sql` — tables, enums, indexes, RLS policies.
 - `002_storage_buckets.sql` — creates the public `catestants` storage bucket and a `select` policy on `storage.objects` for it. Run this once in the Supabase SQL editor after `001`.
+- `003_storage_uploads.sql` — adds the `insert` policy on `storage.objects` that lets authenticated users upload to `catestants/<user_id>/...`. Required for the browser-direct upload flow. Run this once after `002`.
 
 All tables use UUID primary keys and `timestamptz` timestamps.
 

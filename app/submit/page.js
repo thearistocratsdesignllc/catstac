@@ -2,13 +2,23 @@
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import styles from './page.module.css'
 
 const MAX_CATS = 10
+const STORAGE_BUCKET = 'catestants'
 let nextIdCounter = 2
 
 function newCat() {
   return { id: nextIdCounter++, name: '', sex: 'tom', file: null, imageUrl: null }
+}
+
+function extensionFor(file) {
+  const fromName = file.name?.split('.').pop()?.toLowerCase()
+  if (fromName === 'jpg' || fromName === 'jpeg') return 'jpg'
+  if (fromName === 'png') return 'png'
+  if (file.type === 'image/png') return 'png'
+  return 'jpg'
 }
 
 function TrashIcon() {
@@ -139,6 +149,14 @@ export default function SubmitPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [failed, setFailed] = useState([])
+  const errorRef = useRef(null)
+
+  const showError = (msg) => {
+    setError(msg)
+    requestAnimationFrame(() => {
+      errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 
   const addCat = () => {
     if (cats.length >= MAX_CATS) return
@@ -158,41 +176,85 @@ export default function SubmitPage() {
     setFailed([])
 
     if (!email.trim()) {
-      setError('Please enter your email.')
+      showError('Please enter your email.')
       return
     }
     if (!agreed) {
-      setError('Please agree to the terms before submitting.')
+      showError('Please agree to the terms before submitting.')
       return
     }
     for (let i = 0; i < cats.length; i++) {
       if (!cats[i].file) {
-        setError(`Catestant #${i + 1} is missing a photo.`)
+        showError(`Catestant #${i + 1} is missing a photo.`)
         return
       }
       if (!cats[i].name.trim()) {
-        setError(`Catestant #${i + 1} is missing a name.`)
+        showError(`Catestant #${i + 1} is missing a name.`)
         return
       }
     }
 
-    const formData = new FormData()
-    formData.set('email', email.trim())
-    formData.set('instagram', instagram.trim())
-    formData.set('agreed', String(agreed))
-    cats.forEach((cat) => {
-      formData.append('catNames', cat.name.trim())
-      formData.append('catSexes', cat.sex)
-      formData.append('catPhotos', cat.file)
-    })
-
     setSubmitting(true)
     try {
-      const res = await fetch('/api/submit', { method: 'POST', body: formData })
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        showError('You must be signed in to submit.')
+        setSubmitting(false)
+        return
+      }
+
+      // Upload each photo directly to Supabase Storage in parallel.
+      // Path convention: <user_id>/<catestant_id>.<ext> — required by
+      // the storage RLS policy from migration 003.
+      const uploads = await Promise.all(
+        cats.map(async (cat) => {
+          const catestantId = crypto.randomUUID()
+          const ext = extensionFor(cat.file)
+          const path = `${user.id}/${catestantId}.${ext}`
+          const { error: uploadError } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .upload(path, cat.file, {
+              contentType: cat.file.type || 'image/jpeg',
+              upsert: false,
+            })
+          if (uploadError) return { error: uploadError.message, name: cat.name }
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
+          return {
+            id: catestantId,
+            name: cat.name.trim(),
+            sex: cat.sex,
+            photo_url: publicUrl,
+            photo_storage_path: path,
+          }
+        }),
+      )
+
+      const uploadFailure = uploads.find((u) => u.error)
+      if (uploadFailure) {
+        showError(`Photo upload failed for ${uploadFailure.name || 'a cat'}. Please try again.`)
+        setSubmitting(false)
+        return
+      }
+
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          instagram: instagram.trim(),
+          agreed,
+          cats: uploads,
+        }),
+      })
       const data = await res.json().catch(() => null)
 
       if (!res.ok) {
-        setError(data?.error || 'Something went wrong. Please try again.')
+        showError(data?.error || 'Something went wrong. Please try again.')
         setSubmitting(false)
         return
       }
@@ -201,7 +263,7 @@ export default function SubmitPage() {
       const failedCats = data.failed || []
 
       if (passedCats.length === 0) {
-        setError(
+        showError(
           'None of your cats passed validation. Please check the issues below and try again.',
         )
         setFailed(failedCats)
@@ -223,7 +285,7 @@ export default function SubmitPage() {
       router.push('/submit/confirmation')
     } catch (err) {
       console.error(err)
-      setError('Network error. Please try again.')
+      showError('Network error. Please try again.')
       setSubmitting(false)
     }
   }
@@ -242,7 +304,7 @@ export default function SubmitPage() {
           <p>While voting is open, Catestant names will not be shown, and vote totals won&rsquo;t be shown.</p>
         </div>
 
-        {error && <div className={styles.errorBanner} role="alert">{error}</div>}
+        {error && <div ref={errorRef} className={styles.errorBanner} role="alert">{error}</div>}
 
         {failed.length > 0 && (
           <div className={styles.failedBanner}>
