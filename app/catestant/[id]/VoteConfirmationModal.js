@@ -6,7 +6,7 @@ import styles from './VoteConfirmationModal.module.css'
 
 export default function VoteConfirmationModal({ open, onClose, catId }) {
   const [copied, setCopied] = useState(false)
-  const url = `https://www.catstac.com/mmddyyyy/${catId}`
+  const url = `https://www.catstac.com/catestant/${catId}`
 
   useEffect(() => {
     if (!open) return
