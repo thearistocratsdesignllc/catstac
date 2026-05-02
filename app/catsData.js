@@ -27,12 +27,53 @@ export async function getTodaysCats() {
 }
 
 export async function getCatNeighbors(id) {
-  const cats = await getTodaysCats()
-  const idx = cats.findIndex((c) => String(c.id) === String(id))
-  if (idx === -1) return null
+  const supabase = await createClient()
+
+  const { data: cat, error: catError } = await supabase
+    .from('catestants')
+    .select('id, created_at, voting_date')
+    .eq('id', id)
+    .eq('admin_status', 'approved')
+    .maybeSingle()
+
+  if (catError || !cat) return null
+
+  const baseQuery = () =>
+    supabase
+      .from('catestants')
+      .select('id, photo_url')
+      .eq('voting_date', cat.voting_date)
+      .eq('admin_status', 'approved')
+
+  const [{ data: prevRows }, { data: nextRows }] = await Promise.all([
+    baseQuery()
+      .lt('created_at', cat.created_at)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    baseQuery()
+      .gt('created_at', cat.created_at)
+      .order('created_at', { ascending: true })
+      .limit(1),
+  ])
+
+  let prev = prevRows?.[0] ?? null
+  let next = nextRows?.[0] ?? null
+
+  if (!prev) {
+    const { data } = await baseQuery()
+      .order('created_at', { ascending: false })
+      .limit(1)
+    prev = data?.[0] ?? null
+  }
+  if (!next) {
+    const { data } = await baseQuery()
+      .order('created_at', { ascending: true })
+      .limit(1)
+    next = data?.[0] ?? null
+  }
+
   return {
-    cat: cats[idx],
-    prev: cats[(idx - 1 + cats.length) % cats.length],
-    next: cats[(idx + 1) % cats.length],
+    prev: prev ? { id: prev.id, src: prev.photo_url } : null,
+    next: next ? { id: next.id, src: next.photo_url } : null,
   }
 }

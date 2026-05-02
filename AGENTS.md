@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 A Next.js 16 / React 19 front-end for a daily cat-photo contest. Users browse a grid of "Catestants," view per-cat detail pages, cast one free vote per day, purchase extra votes, submit their own cats, and browse past winners.
 
-The login and payment flows are **not** built yet — everything else is.
+Built and wired to Supabase: Google OAuth sign-in (`/signin` + `/auth/callback`) and the submission pipeline (`/submit` → `/api/submit` → `submissions` + `catestants` + the `catestants` storage bucket, with OpenAI photo validation). Still mock or local-only: the cat grid, catestant detail, vote button (writes to `localStorage`), and winners pages. Payments are not built — see *Things not yet built*.
 
 For visual conventions (colors, typography, modal pattern, card pattern, responsive rules), read `design.md`.
 
@@ -27,12 +27,13 @@ For visual conventions (colors, typography, modal pattern, card pattern, respons
 | `/catestant/[id]` | `app/catestant/[id]/page.js` | Cat detail w/ prev/next arrows + `VoteButton`. |
 | `/winners` | `app/winners/page.js` | Grid of past winners with inline name/date sash. |
 | `/winners/[id]` | `app/winners/[id]/page.js` | Winner detail with large sash (name in Ballet) and prev/next arrows. |
-| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. |
-| `/submit/confirmation` | `app/submit/confirmation/page.js` | Post-submit thank-you with one share card per submitted cat. Mock data lives at the top of the file. |
+| `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. POSTs `FormData` to `/api/submit` and shows a "Validating your cats…" overlay while the request is in flight. |
+| `/submit/confirmation` | `app/submit/confirmation/page.js` | Post-submit thank-you with one share card per *passing* cat plus an inline callout for any that failed AI validation. Reads the result from `sessionStorage.catstac_submission_result` (written by `/submit` immediately before `router.push`). Renders an empty state if the storage key is absent (e.g. direct-URL navigation). |
 | `/rules` | `app/rules/page.js` | Static rules content. |
 | `/why` | `app/why/page.js` | Founder letter. |
 | `/signin` | `app/signin/page.js` + `app/signin/SignInClient.js` | Google OAuth sign-in. Reads `redirectTo` from the query string and threads it through the callback. |
 | `/auth/callback` | `app/auth/callback/route.js` | OAuth code-exchange handler. Calls `supabase.auth.exchangeCodeForSession(code)` then redirects to `redirectTo` (must start with `/`). |
+| `/api/submit` | `app/api/submit/route.js` | Auth-gated POST handler for the submission form. Creates the `submissions` row, uploads each photo to the `catestants` storage bucket, inserts a `pending` `catestants` row, runs OpenAI validation, then updates each row with `ai_status = 'passed' \| 'failed'`. Returns `{ submission_id, voting_date, cotd_date, passed, failed }`. |
 
 Routes referenced in the UI but not yet implemented: `/terms` (linked from submit checkbox).
 
@@ -50,21 +51,20 @@ Page-scoped components:
 - **`VoteConfirmationModal`** (`app/catestant/[id]/VoteConfirmationModal.js`) — opens after recording a vote; shows the direct link and a copy button.
 - **`VoteUsedModal`** (`app/catestant/[id]/VoteUsedModal.js`) — opens when the user tries to vote after already using today's free vote; shows two purchase packages ($1 / 3 votes, $5 / 10 votes) and a back link. `onPurchase` prop is a no-op stub — wire it up to the real payment flow once it exists.
 
-## Data layer (mock)
+## Data layer
 
-There is no backend. All page data comes from in-repo JS modules:
+The `/submit` flow is wired to Supabase end-to-end (see *Submit pipeline* below). The browse/detail pages are still mock — they read from in-repo JS modules:
 
 - `app/catsData.js` — today's Catestants + `getCatNeighbors(id)` for prev/next on the detail page. Uses Unsplash URLs.
 - `app/winnersData.js` — past winners + `getWinnerById(id)` / `getWinnerNeighbors(id)`.
 
-The submit and confirmation pages use `useState` / mock constants for their data — no persistence.
-
-When a backend is introduced, swap these mock modules for real fetchers; route handlers should keep the same shape (`{ cat/winner, prev, next }`) so existing pages don't need refactors.
+When swapping these for real fetchers, keep the return shape (`{ cat/winner, prev, next }`) so the existing pages don't need refactors.
 
 ## State & persistence
 
 - **`localStorage.catstac_intro_dismissed`** — `'true'` suppresses `IntroModal` permanently.
 - **`localStorage.catstac_daily_vote`** — `{ catId, date: 'YYYYMMDD' }`. `VoteButton` reads this on mount to determine whether *this* page's cat was voted for (show the confirmed-vote asset), or a *different* cat was voted for today (clicking vote opens `VoteUsedModal` instead of recording a new vote). Date stamp expires naturally when the calendar day rolls over.
+- **`sessionStorage.catstac_submission_result`** — `{ submission_id, voting_date, cotd_date, passed: [{ id, name, photo_url }], failed: [{ name, reason }] }`. Written by `/submit` after `/api/submit` returns and a passing cat exists; read by `/submit/confirmation` on mount to render the share cards and any "didn't pass validation" callout. Lives for the tab session only — refresh-safe within the tab, but a direct hit to `/submit/confirmation` shows the empty state.
 
 ## Styling conventions
 
@@ -88,7 +88,9 @@ All raster assets live in `public/assets/`. Many have paired `_large` / `_small`
 
 - **Auth UI polish** — sign-out wiring in `HamburgerMenu`, user-scoped daily-vote storage (currently still in `localStorage`). Sign-in itself is implemented; see *Auth* below.
 - **Payments** — wiring `VoteUsedModal`'s `onPurchase` prop to a checkout flow; persisting purchased vote balances.
-- **Backend** — replacing `catsData.js` / `winnersData.js` with real data sources; persisting submissions from `/submit`.
+- **Read-side backend** — replacing `catsData.js` / `winnersData.js` with real fetchers against the `catestants` / `winners` tables. Submit-side persistence is wired (see *Submit pipeline* below).
+- **Vote API** — `VoteButton` still writes to `localStorage` only; needs a route handler that inserts into `votes` (with credit-aware logic per *Database* rules).
+- **Admin queue UI** — failed-AI and pending-review catestants pile up in the DB; no UI surfaces them yet.
 - **Terms page** — linked from the submit form's agreement checkbox.
 
 ## Auth
@@ -137,9 +139,55 @@ If you ever flip the canonical to `www.catstac.com`, all four bullets above must
 
 In Next.js 16 the `middleware.js` convention was renamed to `proxy.js` (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`). The file lives at the project root, exports a function named `proxy` (or default), and declares `config.matcher`. Renaming it to `middleware.js` will silently break it.
 
+## Submit pipeline
+
+End-to-end path from the `/submit` form to a row in `catestants`.
+
+### Files
+
+| File | Role |
+|---|---|
+| `app/submit/page.js` | Client form. Stores the `File` object alongside the preview URL. On submit, builds a `FormData` (parallel `catNames` / `catSexes` / `catPhotos` keys, plus `email` / `instagram` / `agreed`) and `fetch`es `/api/submit`. Renders a full-screen "Validating your cats…" overlay (modal-style, see `design.md`) while the request is in flight, plus inline error / "didn't pass" banners. |
+| `app/api/submit/route.js` | Auth-gated POST handler. All DB writes use `supabaseAdmin`; only `auth.getUser()` uses the cookie SSR client. |
+| `app/submit/confirmation/page.js` | Reads `sessionStorage.catstac_submission_result` on mount; renders one share card per passing cat plus a "didn't pass validation" callout for failed cats. Direct-link URLs are `https://www.catstac.com/catestant/<id>`. |
+| `supabase/migrations/002_storage_buckets.sql` | Creates the `catestants` bucket. |
+
+### Server flow (`app/api/submit/route.js`)
+
+1. **Auth gate.** `await createClient()` → `supabase.auth.getUser()`. If no user, return 401. (The route isn't in `proxy.js`'s `PROTECTED_PATHS`, so the proxy doesn't redirect — the route enforces auth itself.)
+2. **Parse + validate.** Pull `email`, `instagram` (strip leading `@`), `agreed`, and parallel `getAll('catNames' / 'catSexes' / 'catPhotos')`. Reject mismatched-length arrays, missing files, missing names, invalid `cat_sex`, missing email, missing consent — each with a 400 + human-readable message.
+3. **Compute `voting_date`.** Pacific-time `YYYY-MM-DD` via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`. `cotd_date` is `voting_date + 1 day`, returned to the client for display only — the row in `winners` is the source of truth, written by the nightly cron.
+4. **Insert `submissions` row.** `supabaseAdmin.from('submissions').insert({...}).select().single()`. If this fails, return 500 — no per-cat work happens.
+5. **Per-cat loop.** For each cat, in order:
+   1. Generate a UUID for the catestant up front (`crypto.randomUUID()`) so the storage path can include it.
+   2. Upload to `catestants/<submission_id>/<catestant_id>.<ext>` via `supabaseAdmin.storage.from('catestants').upload(...)`. Extension comes from the file name (jpg/png) with a content-type fallback.
+   3. Resolve the public URL (`getPublicUrl`) — the bucket is public, so this URL is what gets stored in `catestants.photo_url` and what OpenAI fetches.
+   4. Insert the `catestants` row with `ai_status = 'pending'`, `admin_status = 'pending_review'`, `is_stock = false`.
+   5. Call OpenAI vision (`gpt-4o-mini`, JSON-schema response format with `contains_cat` / `has_humans` / `is_ai_generated` / `reason`). Pass = `contains_cat && !has_humans && !is_ai_generated`.
+   6. **Update — never delete.** Pass → `ai_status = 'passed'`, full result in `ai_result`, `ai_validated_at = now()`. Fail → `ai_status = 'failed'`, full result in `ai_result`. `admin_status` stays `pending_review` either way; the failed row is what populates the manual-review queue. If OpenAI itself errors out, the row is left at `ai_status = 'pending'` and the cat is reported to the client as "will be reviewed manually."
+6. **Response.** `{ submission_id, voting_date, cotd_date, passed: [{ id, name, photo_url }], failed: [{ name, reason }] }`. Failure reasons are pre-formatted human-readable strings composed from the boolean flags (e.g. "No cat detected. A human is visible.").
+
+### Client outcomes (`app/submit/page.js`)
+
+| Server result | Client behavior |
+|---|---|
+| `passed.length > 0` (all or partial) | Write the full response to `sessionStorage.catstac_submission_result`, then `router.push('/submit/confirmation')`. Confirmation renders share cards for `passed` + an inline callout for `failed`. |
+| `passed.length === 0` | Stay on the form. Render the error banner + the per-cat failure list so the user can fix and retry. **No navigation.** |
+| Network or non-200 error | Stay on form, render the error banner. The submit button re-enables. |
+
+### Storage bucket
+
+Bucket name: `catestants`, public. RLS on `storage.objects`: a `select` policy scoped to `bucket_id = 'catestants'`. Writes happen exclusively through the service-role client (`supabaseAdmin.storage.from('catestants').upload(...)`), which bypasses RLS — there are no public insert/update/delete policies on purpose. Stock cats use a separate `stock-cats` bucket (mentioned in `001`'s comments; bucket creation is out of scope for this migration since the cron job manages it).
+
+Storage path convention: `<submission_id>/<catestant_id>.<ext>`. Both IDs are UUIDs, so paths are inherently unique. The same path is stored on the `catestants` row as `photo_storage_path`, and the corresponding `getPublicUrl(...)` result is stored as `photo_url`.
+
 ## Database (Supabase)
 
-Schema lives in `supabase/migrations/001_initial_schema.sql`. All tables use UUID primary keys and `timestamptz` timestamps.
+Schema lives in `supabase/migrations/`:
+- `001_initial_schema.sql` — tables, enums, indexes, RLS policies.
+- `002_storage_buckets.sql` — creates the public `catestants` storage bucket and a `select` policy on `storage.objects` for it. Run this once in the Supabase SQL editor after `001`.
+
+All tables use UUID primary keys and `timestamptz` timestamps.
 
 ### Connection
 
@@ -154,6 +202,9 @@ Three clients, one per environment. Pick by where the code runs and whether RLS 
 Env vars:
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser; consumed by `client.js` and `server.js`.
 - `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, consumed by `admin.js` only. Never expose to the browser.
+- `OPENAI_API_KEY` — server-only. Consumed by `app/api/submit/route.js` for per-photo cat/human/AI validation.
+
+`lib/supabase/admin.js` is a module-level singleton, so the service role key is read once at server boot. **If you rotate `SUPABASE_SERVICE_ROLE_KEY` or add it for the first time, restart `next dev`** — otherwise `supabaseAdmin` will keep using the stale (or missing) key and writes will fail with `42501` even though the route source code looks correct.
 
 Session refresh: `proxy.js` (the Next 16 proxy file — formerly called middleware) refreshes Supabase auth cookies on each request so `server.js` can read a fresh session. `server.js`'s `setAll` swallows errors silently, since cookie writes from a Server Component throw — the proxy is responsible for those writes instead. See *Auth* below for the full sign-in flow.
 

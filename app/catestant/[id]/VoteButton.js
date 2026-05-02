@@ -1,65 +1,60 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import styles from './page.module.css'
 import VoteConfirmationModal from './VoteConfirmationModal'
 import VoteUsedModal from './VoteUsedModal'
 
-const STORAGE_KEY = 'catstac_daily_vote'
-
-function todayKey() {
-  const d = new Date()
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-}
-
-function readTodayVote() {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (parsed?.date !== todayKey()) return null
-    return parsed.catId ?? null
-  } catch {
-    return null
-  }
-}
-
-export default function VoteButton({ catId }) {
-  const [voted, setVoted] = useState(false)
-  const [votedCatId, setVotedCatId] = useState(null)
+export default function VoteButton({ catId, initialVoted = false }) {
+  const router = useRouter()
+  const [voted, setVoted] = useState(initialVoted)
+  const [pending, setPending] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [usedOpen, setUsedOpen] = useState(false)
-
-  useEffect(() => {
-    const id = readTodayVote()
-    setVotedCatId(id)
-    setVoted(id === catId)
-    setConfirmOpen(false)
-    setUsedOpen(false)
-  }, [catId])
 
   const largeSrc = voted ? '/assets/vote_confirmed_button_large.png' : '/assets/vote_button_large.png'
   const smallSrc = voted ? '/assets/vote_confirmed_button_small.png' : '/assets/vote_button_small.png'
 
-  const handleClick = () => {
-    if (votedCatId && votedCatId !== catId) {
-      setUsedOpen(true)
-      return
-    }
-
-    if (voted) {
-      try { localStorage.removeItem(STORAGE_KEY) } catch {}
-      setVoted(false)
-      setVotedCatId(null)
-      return
-    }
-
+  const handleClick = async () => {
+    if (voted || pending) return
+    setPending(true)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ catId, date: todayKey() }))
-    } catch {}
-    setVoted(true)
-    setVotedCatId(catId)
-    setConfirmOpen(true)
+      const res = await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ catestant_id: catId }),
+      })
+
+      if (res.status === 401) {
+        router.push(`/signin?redirectTo=/catestant/${catId}`)
+        return
+      }
+
+      let body = {}
+      try {
+        body = await res.json()
+      } catch {}
+
+      if (res.ok) {
+        setVoted(true)
+        setConfirmOpen(true)
+        return
+      }
+
+      if (body?.error === 'already_voted') {
+        setVoted(true)
+        return
+      }
+      if (body?.error === 'no_credits') {
+        setUsedOpen(true)
+        return
+      }
+      console.error('vote failed', res.status, body)
+    } catch (err) {
+      console.error('vote request failed', err)
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
@@ -68,8 +63,9 @@ export default function VoteButton({ catId }) {
         type="button"
         className={styles.voteButton}
         onClick={handleClick}
+        disabled={pending}
         aria-pressed={voted}
-        aria-label={voted ? 'Vote recorded — tap to undo' : 'Vote for this catestant'}
+        aria-label={voted ? 'Vote recorded' : 'Vote for this catestant'}
       >
         <img src={largeSrc} className={`${styles.voteImg} ${styles.voteImgLarge}`} alt="" />
         <img src={smallSrc} className={`${styles.voteImg} ${styles.voteImgSmall}`} alt="" />
