@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCatNeighbors } from '../../catsData'
+import SwipeNav from '../../SwipeNav'
 import CatImage from './CatImage'
 import VoteButton from './VoteButton'
 import styles from './page.module.css'
@@ -40,7 +41,11 @@ export default async function CatestantPage({ params }) {
 
   return (
     <main className={styles.main}>
-      <div className={styles.stage}>
+      <SwipeNav
+        prevHref={`/catestant/${prev.id}`}
+        nextHref={`/catestant/${next.id}`}
+        className={styles.stage}
+      >
         <Link
           href={`/catestant/${prev.id}`}
           className={`${styles.arrowLink} ${styles.prev}`}
@@ -52,7 +57,6 @@ export default async function CatestantPage({ params }) {
         </Link>
 
         <CatImage key={cat.id} src={cat.photo_url} alt="Catestant" />
-
 
         <Link
           href={`/catestant/${next.id}`}
@@ -67,7 +71,7 @@ export default async function CatestantPage({ params }) {
         <div className={styles.voteCell}>
           <VoteButton catId={cat.id} initialVoted={initialVoted} />
         </div>
-      </div>
+      </SwipeNav>
     </main>
   )
 }

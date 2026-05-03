@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getWinnerById, getWinnerNeighbors } from '../../winnersData'
+import SwipeNav from '../../SwipeNav'
 import WinnerFrame from './WinnerFrame'
 import styles from './page.module.css'
 
@@ -20,7 +21,11 @@ export default async function WinnerDetailPage({ params }) {
 
   return (
     <main className={styles.main}>
-      <div className={styles.stage}>
+      <SwipeNav
+        prevHref={`/winners/${prev.id}`}
+        nextHref={`/winners/${next.id}`}
+        className={styles.stage}
+      >
         <Link
           href={`/winners/${prev.id}`}
           className={`${styles.arrowLink} ${styles.prev}`}
@@ -42,7 +47,7 @@ export default async function WinnerDetailPage({ params }) {
           <img src="/assets/next_arrow_large.png" className={`${styles.arrow} ${styles.arrowLarge}`} alt="" />
           <img src="/assets/next_arrow_small.png" className={`${styles.arrow} ${styles.arrowSmall}`} alt="" />
         </Link>
-      </div>
+      </SwipeNav>
     </main>
   )
 }

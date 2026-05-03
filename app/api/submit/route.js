@@ -250,12 +250,17 @@ export async function POST(request) {
       result.contains_cat && !result.has_humans && !result.is_ai_generated
 
     if (didPass) {
+      // Auto-approve on AI pass — the cat goes straight into today's grid.
+      // Failed cats stay at admin_status='pending_review' for the manual queue.
+      const now = new Date().toISOString()
       const { error: updateError } = await supabaseAdmin
         .from('catestants')
         .update({
           ai_status: 'passed',
           ai_result: result,
-          ai_validated_at: new Date().toISOString(),
+          ai_validated_at: now,
+          admin_status: 'approved',
+          admin_reviewed_at: now,
         })
         .eq('id', catestantId)
       if (updateError) console.error('passed update failed', updateError)

@@ -76,23 +76,34 @@ async function tallyWinners(votingDate, cotdDate) {
 }
 
 async function backfillStockCats(votingDate) {
-  const { count, error: countErr } = await supabaseAdmin
+  // Count ALL approved cats for the day (real + already-inserted stock) so
+  // re-running the cron is idempotent. Counting only is_stock=false would
+  // ignore stock from a prior run and re-insert another full batch,
+  // producing duplicates in the grid.
+  const { count: totalApproved, error: totalErr } = await supabaseAdmin
+    .from('catestants')
+    .select('id', { count: 'exact', head: true })
+    .eq('voting_date', votingDate)
+    .eq('admin_status', 'approved')
+  if (totalErr) throw totalErr
+
+  const { count: realCount, error: realErr } = await supabaseAdmin
     .from('catestants')
     .select('id', { count: 'exact', head: true })
     .eq('voting_date', votingDate)
     .eq('is_stock', false)
     .eq('admin_status', 'approved')
-  if (countErr) throw countErr
+  if (realErr) throw realErr
 
-  const realCount = count ?? 0
-  const needed = TARGET_GRID_SIZE - realCount
-  if (needed <= 0) return { added: 0, real_count: realCount }
+  const total = totalApproved ?? 0
+  const needed = TARGET_GRID_SIZE - total
+  if (needed <= 0) return { added: 0, real_count: realCount ?? 0, total }
 
   const { data: stock, error: stockErr } = await supabaseAdmin
     .from('stock_cats')
     .select('id, cat_name, cat_sex, photo_url, photo_storage_path')
   if (stockErr) throw stockErr
-  if (!stock || stock.length === 0) return { added: 0, real_count: realCount }
+  if (!stock || stock.length === 0) return { added: 0, real_count: realCount ?? 0, total }
 
   const pool = [...stock]
   for (let i = pool.length - 1; i > 0; i--) {
@@ -116,7 +127,7 @@ async function backfillStockCats(votingDate) {
   const { error: insertErr } = await supabaseAdmin.from('catestants').insert(rows)
   if (insertErr) throw insertErr
 
-  return { added: rows.length, real_count: realCount }
+  return { added: rows.length, real_count: realCount ?? 0, total: total + rows.length }
 }
 
 export async function GET(request) {
