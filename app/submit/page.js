@@ -10,7 +10,7 @@ const STORAGE_BUCKET = 'catestants'
 let nextIdCounter = 2
 
 function newCat() {
-  return { id: nextIdCounter++, name: '', sex: 'tom', file: null, imageUrl: null }
+  return { id: nextIdCounter++, name: '', sex: '', file: null, imageUrl: null }
 }
 
 function extensionFor(file) {
@@ -41,8 +41,6 @@ function UploadIcon() {
 }
 
 function CatForm({ cat, index, showRemove, onRemove, onChange }) {
-  const fileInputRef = useRef(null)
-
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -65,21 +63,12 @@ function CatForm({ cat, index, showRemove, onRemove, onChange }) {
       <hr className={styles.cardDivider} />
 
       <div className={styles.catFormBody}>
-        <div
-          className={styles.uploadArea}
-          onClick={() => fileInputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-          aria-label="Upload cat photo"
-        >
+        <label className={styles.uploadArea} aria-label="Upload cat photo">
           <input
-            ref={fileInputRef}
             type="file"
             accept=".png,.jpg,.jpeg"
             className={styles.fileInput}
             onChange={handleFileChange}
-            tabIndex={-1}
           />
           {cat.imageUrl ? (
             <img src={cat.imageUrl} className={styles.uploadPreview} alt="Cat preview" />
@@ -90,7 +79,7 @@ function CatForm({ cat, index, showRemove, onRemove, onChange }) {
               <span className={styles.uploadHint}>PNG or JPG</span>
             </>
           )}
-        </div>
+        </label>
 
         <div className={styles.catFields}>
           <div className={styles.fieldGroup}>
@@ -142,7 +131,7 @@ function CatForm({ cat, index, showRemove, onRemove, onChange }) {
 
 export default function SubmitPage() {
   const router = useRouter()
-  const [cats, setCats] = useState([{ id: 1, name: '', sex: 'tom', file: null, imageUrl: null }])
+  const [cats, setCats] = useState([{ id: 1, name: '', sex: '', file: null, imageUrl: null }])
   const [email, setEmail] = useState('')
   const [instagram, setInstagram] = useState('')
   const [agreed, setAgreed] = useState(false)
@@ -190,6 +179,10 @@ export default function SubmitPage() {
       }
       if (!cats[i].name.trim()) {
         showError(`Catestant #${i + 1} is missing a name.`)
+        return
+      }
+      if (cats[i].sex !== 'tom' && cats[i].sex !== 'queen') {
+        showError(`Catestant #${i + 1} is missing a sex selection.`)
         return
       }
     }

@@ -46,16 +46,28 @@
 
 .imageWrap {
   width: 100%;
-  aspect-ratio: 1006 / 568;
-  background-color: var(--color-placeholder);
-  overflow: hidden;
+  min-height: 240px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--color-bg);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Orientation hooks set by WinnerFrame onLoad — applied to .frame so the
+   sash anchors to the actual image's bottom in either orientation. */
+.frame.landscape,
+.frame.portrait {
+  /* shared */
 }
 
 .catImage {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 80vh;
 }
 
 /* ── Sash (large) ──

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getWinnerById, getWinnerNeighbors } from '../../winnersData'
+import WinnerFrame from './WinnerFrame'
 import styles from './page.module.css'
 
 export async function generateMetadata({ params }) {
@@ -30,31 +31,7 @@ export default async function WinnerDetailPage({ params }) {
           <img src="/assets/previous_arrow_small.png" className={`${styles.arrow} ${styles.arrowSmall}`} alt="" />
         </Link>
 
-        <div className={styles.frame}>
-          <div className={styles.imageWrap}>
-            <img src={winner.src} alt={winner.name} className={styles.catImage} />
-          </div>
-
-          <div className={styles.sash}>
-            <img
-              src="/assets/winner_gradient_large.png"
-              className={`${styles.sashGradient} ${styles.sashGradientLarge}`}
-              alt=""
-            />
-            <img
-              src="/assets/winner_gradient_small.png"
-              className={`${styles.sashGradient} ${styles.sashGradientSmall}`}
-              alt=""
-            />
-            <div className={styles.sashContent}>
-              <span className={styles.name}>{winner.name}</span>
-              <div className={styles.meta}>
-                <span className={styles.metaTitle}>Official Catstac Cat of the Day</span>
-                <span className={styles.metaDate}>{winner.date}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WinnerFrame key={winner.id} src={winner.src} name={winner.name} date={winner.date} />
 
         <Link
           href={`/winners/${next.id}`}

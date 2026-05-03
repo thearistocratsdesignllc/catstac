@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCatNeighbors } from '../../catsData'
+import CatImage from './CatImage'
 import VoteButton from './VoteButton'
 import styles from './page.module.css'
 
@@ -50,9 +51,8 @@ export default async function CatestantPage({ params }) {
           <img src="/assets/previous_arrow_small.png" className={`${styles.arrow} ${styles.arrowSmall}`} alt="" />
         </Link>
 
-        <div className={styles.imageWrap}>
-          <img src={cat.photo_url} alt="Catestant" className={styles.catImage} />
-        </div>
+        <CatImage key={cat.id} src={cat.photo_url} alt="Catestant" />
+
 
         <Link
           href={`/catestant/${next.id}`}
