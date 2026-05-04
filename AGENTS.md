@@ -8,7 +8,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 A Next.js 16 / React 19 front-end for a daily cat-photo contest. Users browse a grid of "Catestants," view per-cat detail pages, cast one free vote per day, purchase extra votes, submit their own cats, and browse past winners.
 
-Built and wired to Supabase: Google OAuth sign-in (`/signin` + `/auth/callback`) and the submission pipeline (`/submit` → `/api/submit` → `submissions` + `catestants` + the `catestants` storage bucket, with OpenAI photo validation). Still mock or local-only: the cat grid, catestant detail, vote button (writes to `localStorage`), and winners pages. Payments are not built — see *Things not yet built*.
+Built and wired to Supabase end-to-end:
+- Google OAuth sign-in (`/signin` + `/auth/callback`).
+- Submission pipeline (`/submit` → `/api/submit` → `submissions` + `catestants` + `catestants` storage bucket, with OpenAI photo validation; auto-approves on AI pass).
+- Home grid + catestant detail + winner detail all read from Supabase.
+- Vote casting (`VoteButton` → `/api/vote`), with free-vote-per-day + purchased-credit fallback enforced server-side and backed by DB unique indexes.
+- Nightly cron (`/api/cron/nightly`) tallies yesterday's votes into `winners` and idempotently backfills today's grid from `stock_cats`.
+
+Not built yet: payments to top up `vote_credits`, admin queue UI for failed-AI cats, and the `/terms` page. See *Things not yet built*.
 
 For visual conventions (colors, typography, modal pattern, card pattern, responsive rules), read `design.md`.
 
@@ -23,17 +30,19 @@ For visual conventions (colors, typography, modal pattern, card pattern, respons
 
 | Path | File | Notes |
 |---|---|---|
-| `/` | `app/page.js` | Home: Cat of the Day banner + today's Catestant grid. Renders `IntroModal`. |
-| `/catestant/[id]` | `app/catestant/[id]/page.js` | Cat detail w/ prev/next arrows + `VoteButton`. |
-| `/winners` | `app/winners/page.js` | Grid of past winners with inline name/date sash. |
-| `/winners/[id]` | `app/winners/[id]/page.js` | Winner detail with large sash (name in Ballet) and prev/next arrows. |
+| `/` | `app/page.js` | Home: Cat of the Day banner + today's Catestant grid (queries `catestants` via `getTodaysCats` in `app/catsData.js`). Renders `IntroModal`. |
+| `/catestant/[id]` | `app/catestant/[id]/page.js` | Cat detail. Photo via `<CatImage>` (orientation-aware, tap-to-open-fullsize). Prev/next via arrows + `<SwipeNav>` mobile gesture, both routing through ids returned by `getCatNeighbors` so the sequence matches the grid. Initial vote state seeded server-side and passed to `<VoteButton>`. 404 if the row is missing or not `admin_status='approved'`. |
+| `/winners` | `app/winners/page.js` | Grid of past winners with inline name/date sash (queries `winners` via `getWinners` in `app/winnersData.js`). |
+| `/winners/[id]` | `app/winners/[id]/page.js` | Winner detail. Photo + sash via `<WinnerFrame>` (orientation-aware, tap-to-open-fullsize). Prev/next via arrows + `<SwipeNav>` over the wraparound list from `getWinnerNeighbors`. |
 | `/submit` | `app/submit/page.js` | Multi-catestant submission form (up to 10 cats, per-cat upload + name + sex, plus "About You" card). Gated — `proxy.js` redirects unauthenticated users to `/signin?redirectTo=/submit`. Uploads each photo directly to the `catestants` Storage bucket from the browser (sidesteps Vercel's 4.5MB API body limit), then POSTs JSON `{ email, instagram, agreed, cats: [{ id, name, sex, photo_url, photo_storage_path }] }` to `/api/submit` and shows a "Validating your cats…" overlay while the request is in flight. |
 | `/submit/confirmation` | `app/submit/confirmation/page.js` | Post-submit thank-you with one share card per *passing* cat plus an inline callout for any that failed AI validation. Reads the result from `sessionStorage.catstac_submission_result` (written by `/submit` immediately before `router.push`). Renders an empty state if the storage key is absent (e.g. direct-URL navigation). |
 | `/rules` | `app/rules/page.js` | Static rules content. |
 | `/why` | `app/why/page.js` | Founder letter. |
 | `/signin` | `app/signin/page.js` + `app/signin/SignInClient.js` | Google OAuth sign-in. Reads `redirectTo` from the query string and threads it through the callback. |
 | `/auth/callback` | `app/auth/callback/route.js` | OAuth code-exchange handler. Calls `supabase.auth.exchangeCodeForSession(code)` then redirects to `redirectTo` (must start with `/`). |
-| `/api/submit` | `app/api/submit/route.js` | Auth-gated POST handler for the submission form. Accepts JSON (photos are already in Storage from the browser upload). Creates the `submissions` row, inserts a `pending` `catestants` row per cat, runs OpenAI validation against the public photo URL, then updates each row with `ai_status = 'passed' \| 'failed'`. Returns `{ submission_id, voting_date, cotd_date, passed, failed }`. |
+| `/api/submit` | `app/api/submit/route.js` | Auth-gated POST handler for the submission form. Accepts JSON (photos are already in Storage from the browser upload). Creates the `submissions` row, inserts a `pending_review` `catestants` row per cat, runs OpenAI validation against the public photo URL, then updates each row — pass auto-promotes to `admin_status='approved'` (cat is in the grid immediately), fail leaves it at `pending_review` for the manual queue. Returns `{ submission_id, voting_date, cotd_date, passed, failed }`. |
+| `/api/vote` | `app/api/vote/route.js` | Auth-gated POST handler for `<VoteButton>`. Body: `{ catestant_id }`. Enforces "one vote per cat per user" + "one free vote per voting_date"; falls back to a purchased credit if the free vote is spent. See *Vote API* below. |
+| `/api/cron/nightly` | `app/api/cron/nightly/route.js` | Vercel-cron-only GET handler, gated by `Authorization: Bearer ${CRON_SECRET}`. Tallies yesterday's votes into `winners` and idempotently backfills today's `catestants` grid from `stock_cats` up to 100. See *Nightly cron* below. |
 
 Routes referenced in the UI but not yet implemented: `/terms` (linked from submit checkbox).
 
@@ -44,26 +53,31 @@ Rendered by `app/layout.js` on every page:
 - **`NavBar`** (`app/NavBar.js`) — hamburger button (left), wordmark (center), "Add a Cat" button (right). Opens `HamburgerMenu`.
 - **`HamburgerMenu`** (`app/HamburgerMenu.js`) — slide-in panel with Home / Winners / Rules / Why, Catstac? / Sign In-Out.
 
+Shared client component:
+
+- **`SwipeNav`** (`app/SwipeNav.js`) — wraps detail-page stages and translates left/right touch swipes into `router.push(prevHref|nextHref)`. Triggers only when `|dx| ≥ 50px` AND `|dy| < 80px`, so vertical scrolling stays unaffected. Single-finger only — multi-touch (pinch-zoom) is ignored.
+
 Page-scoped components:
 
 - **`IntroModal`** (`app/IntroModal.js`) — first-visit welcome modal. Dismissed via `localStorage.catstac_intro_dismissed = 'true'` when the user checks "Never ever ever show me this message again."
-- **`VoteButton`** (`app/catestant/[id]/VoteButton.js`) — client component that persists the user's daily vote in `localStorage` and conditionally opens one of two modals (see *State & persistence* below).
+- **`CatImage`** (`app/catestant/[id]/CatImage.js`) — client component for the catestant photo. Detects landscape vs portrait on `onLoad` (via `naturalWidth`/`naturalHeight`) and applies the matching orientation class so portrait photos render tall instead of being cropped to a fixed landscape frame. Wraps the `<img>` in `<a target="_blank">` so a tap on mobile opens the raw image in a new tab where the browser's native pinch-zoom works. Pass `key={cat.id}` from the parent so prev/next navigation remounts and orientation state resets.
+- **`WinnerFrame`** (`app/winners/[id]/WinnerFrame.js`) — same orientation/tap-to-zoom pattern as `CatImage`, but owns the entire frame (image + sash) so the orientation class lives on the sash's container. Pass `key={winner.id}`.
+- **`VoteButton`** (`app/catestant/[id]/VoteButton.js`) — client component. POSTs to `/api/vote` with `{ catestant_id }`. Outcomes: `200` → flip to confirmed asset and open `VoteConfirmationModal`; `409 already_voted` → flip to confirmed (no modal); `402 no_credits` → open `VoteUsedModal`; `401` → `router.push('/signin?redirectTo=…')`. The `initialVoted` prop is hydrated server-side from a `votes` lookup in the detail page, so the confirmed asset shows immediately on a re-visit without flicker.
 - **`VoteConfirmationModal`** (`app/catestant/[id]/VoteConfirmationModal.js`) — opens after recording a vote; shows the direct link and a copy button.
-- **`VoteUsedModal`** (`app/catestant/[id]/VoteUsedModal.js`) — opens when the user tries to vote after already using today's free vote; shows two purchase packages ($1 / 3 votes, $5 / 10 votes) and a back link. `onPurchase` prop is a no-op stub — wire it up to the real payment flow once it exists.
+- **`VoteUsedModal`** (`app/catestant/[id]/VoteUsedModal.js`) — opens when the vote API rejects with `no_credits`; shows two purchase packages ($1 / 3 votes, $5 / 10 votes) and a back link. `onPurchase` prop is a no-op stub — wire it up to the real payment flow once it exists.
 
 ## Data layer
 
-The `/submit` flow is wired to Supabase end-to-end (see *Submit pipeline* below). The browse/detail pages are still mock — they read from in-repo JS modules:
+Read-side helpers wrap Supabase queries so pages stay declarative.
 
-- `app/catsData.js` — today's Catestants + `getCatNeighbors(id)` for prev/next on the detail page. Uses Unsplash URLs.
-- `app/winnersData.js` — past winners + `getWinnerById(id)` / `getWinnerNeighbors(id)`.
-
-When swapping these for real fetchers, keep the return shape (`{ cat/winner, prev, next }`) so the existing pages don't need refactors.
+- `app/catsData.js` — `getTodaysCats()` returns today's approved `catestants` for the home grid; `getCatNeighbors(id)` returns `{ prev, next }` for the detail page. Both go through one private `fetchTodayCatestants` helper that orders by `(created_at asc, id asc)` and filters `admin_status='approved'`. `getCatNeighbors` fetches the entire day, finds the current id by index, and returns the wraparound prev/next — guaranteeing the detail-page sequence is exactly the grid sequence. Voting_date is Pacific-time via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`.
+- `app/winnersData.js` — `getWinners()` returns all past winners (most recent `cotd_date` first, ties ordered by `tie_sequence`); `getWinnerById(id)` and `getWinnerNeighbors(id)` use the same fetch + index pattern as the catestant helpers.
 
 ## State & persistence
 
+The vote state lives in Supabase (`votes` + `vote_credits`); the catestant detail page hydrates `initialVoted` server-side so the UI reflects DB truth on every navigation. Only two browser-storage keys remain, both for UI ergonomics (not source of truth):
+
 - **`localStorage.catstac_intro_dismissed`** — `'true'` suppresses `IntroModal` permanently.
-- **`localStorage.catstac_daily_vote`** — `{ catId, date: 'YYYYMMDD' }`. `VoteButton` reads this on mount to determine whether *this* page's cat was voted for (show the confirmed-vote asset), or a *different* cat was voted for today (clicking vote opens `VoteUsedModal` instead of recording a new vote). Date stamp expires naturally when the calendar day rolls over.
 - **`sessionStorage.catstac_submission_result`** — `{ submission_id, voting_date, cotd_date, passed: [{ id, name, photo_url }], failed: [{ name, reason }] }`. Written by `/submit` after `/api/submit` returns and a passing cat exists; read by `/submit/confirmation` on mount to render the share cards and any "didn't pass validation" callout. Lives for the tab session only — refresh-safe within the tab, but a direct hit to `/submit/confirmation` shows the empty state.
 
 ## Styling conventions
@@ -86,11 +100,10 @@ All raster assets live in `public/assets/`. Many have paired `_large` / `_small`
 
 ## Things not yet built
 
-- **Auth UI polish** — sign-out wiring in `HamburgerMenu`, user-scoped daily-vote storage (currently still in `localStorage`). Sign-in itself is implemented; see *Auth* below.
-- **Payments** — wiring `VoteUsedModal`'s `onPurchase` prop to a checkout flow; persisting purchased vote balances.
-- **Read-side backend** — replacing `catsData.js` / `winnersData.js` with real fetchers against the `catestants` / `winners` tables. Submit-side persistence is wired (see *Submit pipeline* below).
-- **Vote API** — `VoteButton` still writes to `localStorage` only; needs a route handler that inserts into `votes` (with credit-aware logic per *Database* rules).
+- **Sign-out wiring** in `HamburgerMenu`. Sign-in itself is implemented; see *Auth* below.
+- **Payments** — wiring `VoteUsedModal`'s `onPurchase` prop to a Stripe checkout flow and inserting `vote_credits` rows on successful payment intent.
 - **Admin queue UI** — failed-AI and pending-review catestants pile up in the DB; no UI surfaces them yet.
+- **Winner portrait + email** — `winners.portrait_url` and `winner_email_sent_at` are still null after the cron writes a winner row; the cron currently only does the tally + stock backfill.
 - **Terms page** — linked from the submit form's agreement checkbox.
 
 ## Auth
@@ -193,6 +206,66 @@ Stock cats use a separate `stock-cats` bucket (mentioned in `001`'s comments; bu
 
 Storage path convention: `<user_id>/<catestant_id>.<ext>`. Both IDs are UUIDs, so paths are inherently unique. The catestant_id in the path matches the `catestants.id` of the corresponding row (the browser generates it before the upload and the API route inserts the row with that same id). The same path is stored on the `catestants` row as `photo_storage_path`, and the corresponding `getPublicUrl(...)` result is stored as `photo_url`.
 
+## Vote API
+
+End-to-end path from `<VoteButton>` to a row in `votes`.
+
+### Server flow (`app/api/vote/route.js`)
+
+1. **Auth gate.** `await createClient()` → `supabase.auth.getUser()`. If no user, return `401 unauthorized`.
+2. **Look up the catestant.** Read `voting_date` and `admin_status`. If missing or not approved, return `404 not_found` — defends against voting on non-public cats.
+3. **Rule 1 check** (one vote per user per catestant). If a `votes` row already exists for `(user.id, catestant_id)`, return `409 already_voted` with the user's current credit balance.
+4. **Rule 2 check** (one free vote per user per voting_date). Look for a `votes` row at `(user.id, catestant.voting_date, vote_type='free')`.
+   - **If absent** — insert with `vote_type='free'`, return `{ vote_type: 'free', credit_balance }`. A unique-violation race (`23505`) collapses to `409 already_voted`.
+   - **If present** — fall through to the credit path.
+5. **Credit path.** Compute `SUM(delta)` from `vote_credits` for the user. If `≤ 0`, return `402 no_credits`. Otherwise insert the vote with `vote_type='purchased'` first (the unique index is the source of truth), then append a `delta=-1, source='spent', catestant_id=…` row to `vote_credits`. Vote-insert failures `23505` collapse to `409 already_voted`. If the credit-debit insert fails *after* the vote was recorded, the vote stands and the ledger is logged for manual reconciliation — the index of truth is `votes`, not `vote_credits`.
+
+All writes use `supabaseAdmin`; only `auth.getUser()` uses the cookie SSR client. The route is not in `proxy.js`'s `PROTECTED_PATHS`, so the route enforces auth itself.
+
+### Client outcomes (`<VoteButton>`)
+
+| Server result | Client behavior |
+|---|---|
+| `200` (`vote_type=free`) | Set `voted=true`, open `VoteConfirmationModal`. |
+| `200` (`vote_type=purchased`) | Same as free for now — `credit_balance` is in the response if/when we surface it. |
+| `409 already_voted` | Set `voted=true` (idempotent UX); no modal. |
+| `402 no_credits` | Open `VoteUsedModal` (purchase prompt). |
+| `401` | `router.push('/signin?redirectTo=/catestant/<id>')`. |
+| `404 not_found` / `400 invalid_body` / 5xx | Stay on the page, log; no modal. |
+
+## Nightly cron
+
+`app/api/cron/nightly/route.js` is a `GET` handler scheduled by `vercel.json` at `0 8 * * *` (08:00 UTC = midnight Pacific in PST, 1am in PDT).
+
+### Auth
+
+Header: `Authorization: Bearer ${CRON_SECRET}`. The route returns `401 unauthorized` if `CRON_SECRET` is unset or the header doesn't match. **Set `CRON_SECRET` in the Vercel project env before the first scheduled run** — Vercel sends this header automatically when the env var is configured. Locally you can hit it manually with `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/nightly`.
+
+### What it does each run
+
+1. **Compute dates.** `today = pacificDateString()`, `yesterday = today - 1`. `cotd_date = today` (publicly displayed Cat-of-the-Day date is always `voting_date + 1`).
+2. **Tally yesterday's winners.** Pull `votes.catestant_id` for `voting_date = yesterday`. Group + count in JS. Filter joined catestants to `is_stock=false AND admin_status='approved'` (stock cats can't win by design). Find max vote count, sort tied catestants by `created_at` ascending, then insert one `winners` row per tied cat with `tie_sequence = 1..N` and `cotd_date = today`.
+3. **Backfill today's grid.** Idempotent: count *all* approved catestants (real + already-inserted stock) for `voting_date = today`. If `< 100`, Fisher-Yates over `stock_cats`, take the deficit, and insert into `catestants` with `voting_date = today`, `is_stock = true`, `ai_status = 'passed'`, `admin_status = 'approved'`. **Counting only `is_stock=false` would re-fill the grid every run and create duplicates** — don't.
+4. **Response.** `{ ok, voting_date_tallied, cotd_date, winners: { inserted, vote_count }, stock: { added, real_count, total } }`.
+
+### Manual cleanup of pre-fix duplicates
+
+Older grids may contain duplicate stock-cat rows from a `backfillStockCats` that counted only `is_stock=false`. The fix prevents new duplicates but doesn't clean up existing ones. Run this in the Supabase SQL editor to remove them, keeping the earliest-inserted row per `(voting_date, photo_storage_path)` — which is the same row the new grid order picks anyway:
+
+```sql
+with ranked as (
+  select id, row_number() over (
+    partition by voting_date, photo_storage_path
+    order by created_at asc, id asc
+  ) as rn
+  from public.catestants
+  where is_stock = true
+)
+delete from public.catestants where id in (select id from ranked where rn > 1);
+```
+
+`votes.catestant_id` is `on delete cascade`, so phantom votes attached to duplicates go with them. `winners.catestant_id` is `on delete restrict` — but stock cats can't be winners, so the delete is safe in practice.
+
 ## Database (Supabase)
 
 Schema lives in `supabase/migrations/`:
@@ -216,6 +289,7 @@ Env vars:
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe to use in the browser; consumed by `client.js` and `server.js`.
 - `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS, consumed by `admin.js` only. Never expose to the browser.
 - `OPENAI_API_KEY` — server-only. Consumed by `app/api/submit/route.js` for per-photo cat/human/AI validation.
+- `CRON_SECRET` — server-only. Bearer secret the nightly cron checks before tallying votes / backfilling stock. Vercel sends `Authorization: Bearer $CRON_SECRET` automatically when this env var is set on the project.
 
 `lib/supabase/admin.js` is a module-level singleton, so the service role key is read once at server boot. **If you rotate `SUPABASE_SERVICE_ROLE_KEY` or add it for the first time, restart `next dev`** — otherwise `supabaseAdmin` will keep using the stale (or missing) key and writes will fail with `42501` even though the route source code looks correct.
 

@@ -352,11 +352,16 @@
   background: transparent;
   text-decoration: none;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .cancelBtn:hover {
   opacity: 0.7;
+}
+
+.cancelBtn:active {
+  transform: scale(0.96);
+  opacity: 0.55;
 }
 
 .submitBtn {
@@ -372,11 +377,16 @@
   color: #fff;
   background-color: var(--color-pink);
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .submitBtn:hover {
   opacity: 0.85;
+}
+
+.submitBtn:active:not(:disabled) {
+  transform: scale(0.96);
+  opacity: 0.75;
 }
 
 .submitBtn:disabled,

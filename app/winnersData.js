@@ -31,6 +31,23 @@ export async function getWinners() {
   return data.map(rowToWinner)
 }
 
+export async function getLatestWinner() {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('winners')
+    .select('id, cotd_date, tie_sequence, catestants ( cat_name, photo_url )')
+    .order('cotd_date', { ascending: false })
+    .order('tie_sequence', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('getLatestWinner error:', error)
+    return null
+  }
+  return data ? rowToWinner(data) : null
+}
+
 export async function getWinnerById(id) {
   const winners = await getWinners()
   return winners.find((w) => String(w.id) === String(id)) || null

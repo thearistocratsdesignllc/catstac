@@ -28,6 +28,7 @@
   position: relative;
   aspect-ratio: 4/5;
   overflow: hidden;
+  cursor: pointer;
   background-color: var(--color-placeholder);
 }
 
@@ -36,6 +37,12 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.2s ease;
+}
+
+/* Match the home grid's tile hover (app/page.module.css). */
+.card:hover .cardImage {
+  transform: scale(1.03);
 }
 
 .sash {

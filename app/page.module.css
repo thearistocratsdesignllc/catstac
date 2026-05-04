@@ -33,6 +33,13 @@
 }
 .menuSmall { display: none; }
 
+.wordmarkLink {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+  text-decoration: none;
+}
+
 .wordmark {
   height: 36px;
   width: auto;

@@ -56,6 +56,17 @@
   padding: 0;
   cursor: pointer;
   line-height: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.arrowLink:hover {
+  transform: scale(1.08);
+  opacity: 0.85;
+}
+
+.arrowLink:active {
+  transform: scale(0.92);
+  opacity: 0.65;
 }
 
 .prev { grid-area: prev; }
@@ -85,8 +96,13 @@
   transition: transform 0.15s ease;
 }
 
-.voteButton:hover { transform: scale(1.04); }
-.voteButton:active { transform: scale(0.97); }
+.voteButton:hover { transform: scale(1.06); }
+/* Exaggerated press — bigger squeeze + brightness drop so the tap feels
+   like a deliberate "vote cast" beat, not a generic button click. */
+.voteButton:active {
+  transform: scale(0.82);
+  filter: brightness(0.9);
+}
 
 .voteImg { display: block; }
 .voteImgLarge { height: 72px; width: auto; }
@@ -116,8 +132,10 @@
     max-width: none;
   }
 
-  .prev { justify-self: end; padding-right: 24px; }
-  .next { justify-self: start; padding-left: 24px; }
+  /* Doubled gap on mobile so the swipe-friendly tap targets sit further
+     apart from the vote button in the middle. */
+  .prev { justify-self: end; padding-right: 48px; }
+  .next { justify-self: start; padding-left: 48px; }
 
   .arrowLarge { display: none; }
   .arrowSmall {

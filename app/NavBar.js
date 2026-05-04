@@ -35,8 +35,10 @@ export default function NavBar() {
           )}
         </button>
 
-        <img src="/assets/wordmark_large.png" className={`${styles.wordmark} ${styles.wordmarkLarge}`} alt="catstac" />
-        <img src="/assets/wordmark_small.png" className={`${styles.wordmark} ${styles.wordmarkSmall}`} alt="catstac" />
+        <Link href="/" className={styles.wordmarkLink} aria-label="Catstac home">
+          <img src="/assets/wordmark_large.png" className={`${styles.wordmark} ${styles.wordmarkLarge}`} alt="catstac" />
+          <img src="/assets/wordmark_small.png" className={`${styles.wordmark} ${styles.wordmarkSmall}`} alt="catstac" />
+        </Link>
 
         <Link href="/submit" className={styles.addButton}>
           <img src="/assets/button_cat_top_large.png" className={styles.btnTopLarge} alt="Add a Cat" />

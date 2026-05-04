@@ -2,33 +2,39 @@ import Link from 'next/link'
 import styles from './page.module.css'
 import IntroModal from './IntroModal'
 import { getTodaysCats } from './catsData'
+import { getLatestWinner } from './winnersData'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  const cats = await getTodaysCats()
+  const [cats, latestWinner] = await Promise.all([
+    getTodaysCats(),
+    getLatestWinner(),
+  ])
   return (
     <main className={styles.main}>
       <IntroModal />
 
-      <div className={styles.winnerBanner}>
-        <p className={styles.congratsText}>Congratulations to Vincent!</p>
-        <div className={styles.winnerCard}>
-          <img
-            src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=800&h=600&fit=crop"
-            alt="Cat of the Day"
-            className={styles.winnerImage}
-          />
-          <div className={styles.winnerSash}>
-            <img src="/assets/winner_gradient_large.png" className={`${styles.sashGradient} ${styles.sashGradientLarge}`} alt="" />
-            <img src="/assets/winner_text_large.png" className={`${styles.sashText} ${styles.sashTextLarge}`} alt="Cat of the Day" />
-            <img src="/assets/rosette_large.png" className={`${styles.rosetteImg} ${styles.rosetteLarge}`} alt="" />
-            <img src="/assets/winner_gradient_small.png" className={`${styles.sashGradient} ${styles.sashGradientSmall}`} alt="" />
-            <img src="/assets/winner_text_small.png" className={`${styles.sashText} ${styles.sashTextSmall}`} alt="Cat of the Day" />
-            <img src="/assets/rosette_small.png" className={`${styles.rosetteImg} ${styles.rosetteSmall}`} alt="" />
+      {latestWinner && (
+        <div className={styles.winnerBanner}>
+          <p className={styles.congratsText}>Congratulations to {latestWinner.name}!</p>
+          <div className={styles.winnerCard}>
+            <img
+              src={latestWinner.src}
+              alt={`${latestWinner.name}, Cat of the Day`}
+              className={styles.winnerImage}
+            />
+            <div className={styles.winnerSash}>
+              <img src="/assets/winner_gradient_large.png" className={`${styles.sashGradient} ${styles.sashGradientLarge}`} alt="" />
+              <img src="/assets/winner_text_large.png" className={`${styles.sashText} ${styles.sashTextLarge}`} alt="Cat of the Day" />
+              <img src="/assets/rosette_large.png" className={`${styles.rosetteImg} ${styles.rosetteLarge}`} alt="" />
+              <img src="/assets/winner_gradient_small.png" className={`${styles.sashGradient} ${styles.sashGradientSmall}`} alt="" />
+              <img src="/assets/winner_text_small.png" className={`${styles.sashText} ${styles.sashTextSmall}`} alt="Cat of the Day" />
+              <img src="/assets/rosette_small.png" className={`${styles.rosetteImg} ${styles.rosetteSmall}`} alt="" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <hr className={styles.divider} />
 
